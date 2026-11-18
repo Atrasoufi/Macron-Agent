@@ -58,36 +58,53 @@ func absAll(paths []string) []string {
 }
 
 func newSandbox(cfg Config) (*sandbox, string, error) {
-	// --- اضافه شده برای ExecutionMode ---
-	if cfg.ExecutionMode == "local" {
-		return nil, "Execution mode is LOCAL. Sandbox is explicitly bypassed.", nil
+	execMode := strings.ToLower(strings.TrimSpace(cfg.ExecutionMode))
+	if execMode == "" {
+		execMode = strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_EXECUTION_MODE")))
 	}
-	// ------------------------------------
+	if execMode == "" {
+		execMode = "best-effort"
+	}
+	switch execMode {
+	case "local":
+		return nil, "Execution mode is LOCAL. Sandbox is explicitly bypassed.", nil
+	case "sandbox", "best-effort":
+	default:
+		return nil, "", fmt.Errorf("invalid execution mode %q (use local, sandbox, or best-effort)", execMode)
+	}
 
 	mode := strings.ToLower(strings.TrimSpace(cfg.Sandbox))
 	if mode == "" {
 		mode = strings.ToLower(strings.TrimSpace(os.Getenv("MACRON_SANDBOX")))
 	}
+	if mode == "" && execMode == "sandbox" {
+		mode = SandboxBwrap
+	}
+
 	switch {
 	case mode == "" || offWord(mode):
-		if cfg.ExecutionMode == "sandbox" {
+		if execMode == "sandbox" {
 			return nil, "", errors.New("sandbox execution mode is required, but sandbox setting is 'off'")
 		}
 		return nil, "", nil
 	case mode == SandboxBwrap || mode == SandboxAuto || mode == "on" || mode == "1" || mode == "true" || mode == "yes":
 	default:
-		return nil, "unknown sandbox " + strconv.Quote(mode) + " (use bwrap or off); commands run without one", nil
+		msg := "unknown sandbox " + strconv.Quote(mode) + " (use bwrap or off)"
+		if execMode == "sandbox" {
+			return nil, "", fmt.Errorf("%s, but strict sandbox mode is required", msg)
+		}
+		return nil, msg + "; commands run without one", nil
 	}
-	
+
 	bw, err := exec.LookPath("bwrap")
 	if err != nil {
 		msg := "bwrap is not installed (apt install bubblewrap)"
-		if cfg.ExecutionMode == "sandbox" {
+		if execMode == "sandbox" {
 			return nil, "", fmt.Errorf("%s, but strict sandbox mode is required", msg)
 		}
 		return nil, msg + "; commands run without a sandbox", nil
 	}
-	
+
 	sb := &sandbox{
 		bwrap:      bw,
 		base:       cfg.BaseDir,
@@ -129,7 +146,7 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 			why = err.Error()
 		}
 		msg := "bwrap failed self-test (" + why + ")"
-		if cfg.ExecutionMode == "sandbox" {
+		if execMode == "sandbox" {
 			return nil, "", fmt.Errorf("%s, but strict sandbox mode is required", msg)
 		}
 		return nil, msg + "; commands run without a sandbox", nil

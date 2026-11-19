@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"os"
 	"strings"
 	"time"
@@ -22,6 +23,19 @@ func normalizeExecutionMode(v string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func executionModeFlagSet(fs *flag.FlagSet) bool {
+	if fs == nil {
+		return false
+	}
+	set := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "execution-mode" {
+			set = true
+		}
+	})
+	return set
 }
 
 // applySavedExecutionMode loads the persisted execution mode from the settings

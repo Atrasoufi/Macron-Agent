@@ -3,10 +3,44 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
-const settingExecutionMode = "execution_mode"
+const (
+	settingExecutionMode = "execution_mode"
+	envExecutionMode     = "MACRON_EXECUTION_MODE"
+)
+
+func normalizeExecutionMode(v string) (string, bool) {
+	switch m := strings.ToLower(strings.TrimSpace(v)); m {
+	case "local", "sandbox", "best-effort":
+		return m, true
+	default:
+		return "", false
+	}
+}
+
+// applySavedExecutionMode loads the persisted execution mode from the settings
+// store only when MACRON_EXECUTION_MODE is not explicitly set in the environment.
+func applySavedExecutionMode(cfg *config.Config, getSetting func(string) (string, bool)) {
+	if cfg == nil || getSetting == nil {
+		return
+	}
+	if strings.TrimSpace(os.Getenv(envExecutionMode)) != "" {
+		return
+	}
+	saved, ok := getSetting(settingExecutionMode)
+	if !ok {
+		return
+	}
+	if mode, valid := normalizeExecutionMode(saved); valid {
+		cfg.ExecutionMode = mode
+	}
+}
 
 func (t *terminal) ExecutionMode() string {
 	if t.app != nil && t.app.Machine != nil {
@@ -22,6 +56,14 @@ func (t *terminal) ExecutionMode() string {
 
 func (t *terminal) Sandboxed() bool {
 	return t.app != nil && t.app.Machine != nil && t.app.Machine.Sandboxed()
+}
+
+func (t *terminal) executionStatus() string {
+	mode := t.ExecutionMode()
+	if t.Sandboxed() {
+		return mode + " (sandbox active)"
+	}
+	return mode + " (unsandboxed)"
 }
 
 func (t *terminal) SetExecutionMode(mode string) (string, error) {

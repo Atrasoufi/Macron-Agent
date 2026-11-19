@@ -156,7 +156,7 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.MCPConfig, "mcp-config", envOr(EnvMCPConfig, HomePath("mcp_servers.json")), "MCP servers, in mcp_servers.json form (env "+EnvMCPConfig+")")
 	fs.StringVar(&c.Sandbox, "sandbox", envOr(EnvSandbox, ""), "sandbox backend for code and commands (bwrap or off; env "+EnvSandbox+")")
 	fs.BoolVar(&c.SandboxNoNet, "sandbox-no-net", envBool(EnvSandboxNoNet), "disable network access inside the sandbox (env "+EnvSandboxNoNet+")")
-	
+
 	fs.StringVar(&c.ExecutionMode, "execution-mode", envOr("MACRON_EXECUTION_MODE", "best-effort"), "execution mode: local, sandbox, or best-effort")
 
 	c.GitHubToken = os.Getenv(EnvGitHubToken)
@@ -191,7 +191,7 @@ const (
 
 func (c *Config) Validate(fs *flag.FlagSet) (warnings []string, err error) {
 	c.APIURL = strings.TrimRight(strings.TrimSpace(c.APIURL), "/")
-	
+
 	c.ExecutionMode = strings.ToLower(strings.TrimSpace(c.ExecutionMode))
 	if c.ExecutionMode == "" {
 		c.ExecutionMode = "best-effort"

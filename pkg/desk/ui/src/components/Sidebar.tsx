@@ -124,9 +124,11 @@ const ThreadList = memo(function ThreadList({ threads, active }: { threads: Thre
   );
 });
 
+const EMPTY_THREADS: ThreadSummary[] = [];
+
 const Row = memo(function Row({ p, on, isHome, home }: { p: Summary; on: boolean; isHome: boolean; home: string }) {
   const t = useT();
-  const threads = useStore((s) => (on ? s.threads : []));
+  const threads = useStore((s) => (on ? s.threads : EMPTY_THREADS));
   const activeThread = useStore((s) => s.activeThread);
   const preview = p.preview || (isHome ? t("General conversations") : shortPath(p.path, home));
   return (

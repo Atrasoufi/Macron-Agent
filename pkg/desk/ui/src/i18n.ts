@@ -134,6 +134,18 @@ const FA: Record<string, string> = {
   "Disconnect": "قطع اتصال",
   "Remove": "حذف",
   "Dismiss": "بستن",
+  "Safe commands run on their own. Anything risky waits for you.": "دستورات امن خودکار اجرا می‌شوند؛ کارهای پرخطر منتظر تأیید شما می‌مانند.",
+  "Every command waits for your OK.": "هر دستوری قبل از اجرا منتظر تأیید شما می‌ماند.",
+  "Nothing waits. Only for machines you can afford to break.": "هیچ دستوری منتظر تأیید نمی‌ماند (فقط برای محیط‌های آزمایشی).",
+  "Strict bubblewrap isolation is active (fail-closed).": "سندباکس سخت‌گیرانه bubblewrap فعال است (Fail-Closed).",
+  "Strict bubblewrap isolation (fail-closed if unavailable).": "سندباکس سخت‌گیرانه bubblewrap (در صورت نبودن متوقف می‌شود).",
+  "Strict bubblewrap isolation is only available on Linux.": "سندباکس bubblewrap فقط روی لینوکس در دسترس است.",
+  "Sandbox active; falls back to local if unavailable.": "سندباکس فعال است؛ در صورت نبودن، محلی اجرا می‌شود.",
+  "Unsandboxed; uses bubblewrap when available.": "بدون سندباکس؛ در صورت وجود bubblewrap از آن استفاده می‌شود.",
+  "Unsandboxed (bubblewrap sandbox is Linux-only).": "بدون سندباکس (bubblewrap فقط مخصوص لینوکس است).",
+  "Sandbox bypassed. Commands run directly on the host.": "سندباکس خاموش است و دستورات مستقیم روی سیستم اجرا می‌شوند.",
+  "On. Commands run without asking until it runs out.": "روشن است. دستورات تا پایان زمان بدون پرسیدن اجرا می‌شوند.",
+  "Let Macron run everything without asking, for a while.": "به مکرون اجازه دهید برای ۳۰ دقیقه همه‌چیز را بدون پرسیدن اجرا کند.",
 };
 
 export function tr(lang: Lang, key: string): string {

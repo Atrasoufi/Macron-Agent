@@ -708,11 +708,13 @@ audio.file-media { height: 44px; background: none; padding: 6px 8px 0; border-bo
 .conn-actions { display: flex; justify-content: flex-end; }
 
 /* Bilingual RTL support (Persian UI) */
-html[dir="rtl"] body { font-family: "Vazirmatn", "IRANSansX", "Segoe UI", Tahoma, var(--sans); }
+html[dir="rtl"] body { font-family: "Vazirmatn", "IRANSansX", "Noto Sans Arabic", "Segoe UI", Tahoma, "DejaVu Sans", sans-serif; }
 html[dir="rtl"] .side { border-right: 0; border-left: 1px solid var(--line); }
 html[dir="rtl"] .planside { border-left: 0; border-right: 1px solid var(--line); }
 html[dir="rtl"] .effort-menu { left: auto; right: -40px; }
 html[dir="rtl"] .prose pre, html[dir="rtl"] .prose code, html[dir="rtl"] .diff-code { direction: ltr; text-align: left; }
+html[dir="rtl"] .keys dd, html[dir="rtl"] .att-size, html[dir="rtl"] .uatt-size, html[dir="rtl"] kbd { direction: ltr; unicode-bidi: isolate; }
+.att-thumb { border: 1px solid var(--line-2); }
 @media (max-width: 860px) {
   html[dir="rtl"] .side { inset: 0 0 0 auto; transform: translateX(100%); }
   html[dir="rtl"] .side-open .side { transform: none; }

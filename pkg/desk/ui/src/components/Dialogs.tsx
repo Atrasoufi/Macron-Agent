@@ -1087,26 +1087,30 @@ function Settings() {
 
   const isLinux = !info.platform || info.platform === "linux";
   const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
-  const executionHelp = {
-    sandbox: info.sandboxed
-      ? "Strict bubblewrap isolation is active (fail-closed)."
-      : isLinux
-        ? "Strict bubblewrap isolation (fail-closed if unavailable)."
-        : "Strict bubblewrap isolation is only available on Linux.",
-    "best-effort": info.sandboxed
-      ? "Sandbox active; falls back to local if unavailable."
-      : isLinux
-        ? "Unsandboxed; uses bubblewrap when available."
-        : "Unsandboxed (bubblewrap sandbox is Linux-only).",
-    local: "Sandbox bypassed. Commands run directly on the host.",
-  }[executionMode];
+  const executionHelp = t(
+    {
+      sandbox: info.sandboxed
+        ? "Strict bubblewrap isolation is active (fail-closed)."
+        : isLinux
+          ? "Strict bubblewrap isolation (fail-closed if unavailable)."
+          : "Strict bubblewrap isolation is only available on Linux.",
+      "best-effort": info.sandboxed
+        ? "Sandbox active; falls back to local if unavailable."
+        : isLinux
+          ? "Unsandboxed; uses bubblewrap when available."
+          : "Unsandboxed (bubblewrap sandbox is Linux-only).",
+      local: "Sandbox bypassed. Commands run directly on the host.",
+    }[executionMode],
+  );
 
   const approvals = (info.approvals || "smart") as "smart" | "manual" | "off";
-  const approvalHelp = {
-    smart: "Safe commands run on their own. Anything risky waits for you.",
-    manual: "Every command waits for your OK.",
-    off: "Nothing waits. Only for machines you can afford to break.",
-  }[approvals];
+  const approvalHelp = t(
+    {
+      smart: "Safe commands run on their own. Anything risky waits for you.",
+      manual: "Every command waits for your OK.",
+      off: "Nothing waits. Only for machines you can afford to break.",
+    }[approvals],
+  );
 
   return (
     <>
@@ -1163,7 +1167,7 @@ function Settings() {
             onPick={(m) => apply(() => server.setExecutionMode(m))}
           />
         </Section>
-        <Section title={t("YOLO for 30 minutes")} help={info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while."}>
+        <Section title={t("YOLO for 30 minutes")} help={t(info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while.")}>
           <button
             type="button"
             role="switch"

@@ -20,6 +20,7 @@ export interface Block {
   output?: string;
   failed?: boolean;
   file?: FileRef;
+  attachments?: FileRef[];
   at: number;
 }
 
@@ -117,12 +118,22 @@ export interface StateResponse {
   home: string;
 }
 
+export interface ThreadSummary {
+  id: string;
+  title: string;
+  preview: string;
+  updated: number;
+  count: number;
+}
+
 export interface Snapshot {
   id: string;
   path: string;
   name: string;
   blocks: Block[] | null;
   live: Live | null;
+  thread?: string;
+  threads?: ThreadSummary[];
 }
 
 export interface ProviderChoice {
@@ -138,6 +149,74 @@ export interface Connection {
   name: string;
   capability: string;
   ready: boolean;
+}
+
+export interface ConnectionField {
+  key: string;
+  type: string;
+  purpose: string;
+  default?: string;
+  secret: boolean;
+  set: boolean;
+}
+
+export interface ConnectionDetail {
+  id: string;
+  name: string;
+  capability: string;
+  ready: boolean;
+  restart?: boolean;
+  fields: ConnectionField[];
+}
+
+export interface MemoryEntry {
+  id: number;
+  scope: "memory" | "user";
+  text: string;
+}
+
+export interface SkillView {
+  name: string;
+  category: string;
+  description: string;
+  version?: string;
+  enabled: boolean;
+  uses: number;
+  files?: string[];
+}
+
+export interface GitChange {
+  path: string;
+  status: string;
+  staged: boolean;
+  added: number;
+  deleted: number;
+}
+
+export interface ChangesResponse {
+  git: boolean;
+  branch: string;
+  files: GitChange[];
+}
+
+export interface DiffResponse {
+  path: string;
+  diff: string;
+  truncated?: boolean;
+}
+
+export interface UpdateStatus {
+  current: string;
+  latest?: string;
+  tag?: string;
+  url?: string;
+  notes?: string;
+  available: boolean;
+  installing?: boolean;
+  installed?: boolean;
+  step?: string;
+  error?: string;
+  checkedAt?: number;
 }
 
 export interface Listing {

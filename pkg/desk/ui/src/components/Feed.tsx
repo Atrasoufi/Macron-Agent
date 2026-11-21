@@ -1,9 +1,10 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
-import { follow, onServer, openDialog, openFile, saveFile, toast } from "../actions";
+import { follow, onServer, openDialog, openFile, saveFile } from "../actions";
 import { fileURL } from "../api";
 import { bidi, bytes, clock, copyText, prettyArgs, shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
+import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import type { Block, FileRef, PlanItem } from "../types";
@@ -151,11 +152,23 @@ function Steps({ items, fresh, live }: { items: Block[]; fresh: boolean; live: b
 }
 
 function Actions({ b }: { b: Block }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
   return (
     <div className="msg-actions">
-      <button type="button" className="act" title="Copy the answer" onClick={() => copyText(b.text || "").then(() => toast("Copied"))}>
-        <Icon name="copy" size={13} />
-        <span>Copy</span>
+      <button
+        type="button"
+        className="act"
+        title={t("Copy")}
+        onClick={() =>
+          copyText(b.text || "").then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1400);
+          })
+        }
+      >
+        <Icon name={copied ? "check" : "copy"} size={13} />
+        <span>{copied ? t("Copied") : t("Copy")}</span>
       </button>
       {b.at > 0 && <span className="when">{clock(b.at)}</span>}
     </div>
@@ -231,6 +244,29 @@ function FileCard({ f, fresh }: { f: FileRef; fresh: boolean }) {
   );
 }
 
+function UserAttachments({ items }: { items?: FileRef[] }) {
+  const project = useStore((s) => s.current);
+  if (!items || !items.length) return null;
+  return (
+    <div className="user-atts">
+      {items.map((a) => {
+        const isImg = (a.type || "").startsWith("image/");
+        return isImg ? (
+          <a key={a.name} className="uatt-img" href={fileURL(project, a.name)} target="_blank" rel="noreferrer" title={a.base}>
+            <img src={fileURL(project, a.name)} alt={a.base} loading="lazy" />
+          </a>
+        ) : (
+          <button key={a.name} type="button" className="uatt-file" onClick={() => openFile(a.name)} title={a.base}>
+            <Icon name="file" size={13} />
+            <span dir="ltr">{a.base}</span>
+            <span className="uatt-size">{bytes(a.size)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh: boolean; panel?: boolean }) {
   const enter = fresh ? " enter" : "";
   switch (b.kind) {
@@ -238,6 +274,7 @@ const BlockView = memo(function BlockView({ b, fresh, panel }: { b: Block; fresh
       return (
         <div className={"msg user" + enter}>
           <div className="bubble" dir="auto" title={b.at ? new Date(b.at).toLocaleString() : undefined}>
+            <UserAttachments items={b.attachments} />
             {b.text}
           </div>
         </div>
@@ -312,37 +349,40 @@ function Stream() {
 }
 
 function Intro() {
+  const t = useT();
   const name = useProjectName();
   const isHome = useStore((s) => s.current === s.defaultId);
   const path = useStore((s) => shortPath(s.projects.find((p) => p.id === s.current)?.path || "", s.home));
   const mod = useMod();
   const noModel = useStore((s) => s.online === true && !s.info.model);
   const keys: [string, string[]][] = [
-    ["Command palette", [mod, "K"]],
-    ["New conversation", [mod, "N"]],
-    ["Plan before changing anything", [mod, "Shift", "P"]],
-    ["Open another folder", [mod, "O"]],
-    ["Stop the current job", ["Esc"]],
+    [t("Command palette"), [mod, "K"]],
+    [t("New conversation"), [mod, "N"]],
+    [t("Plan before changing anything"), [mod, "Shift", "P"]],
+    [t("Open another folder"), [mod, "O"]],
+    [t("Stop the current job"), ["Esc"]],
   ];
   return (
     <div className="intro">
-      <div className="intro-name">{name}</div>
-      <div className="intro-path">{"‎" + path}</div>
+      <div className="intro-name">{name === "Home" ? t("Home") : name}</div>
+      <div className="intro-path" dir="ltr">
+        {"‎" + path}
+      </div>
       {noModel && (
         <div className="setup-card">
           <div>
-            <div className="setup-title">Connect a model to start</div>
-            <div className="setup-text">Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.</div>
+            <div className="setup-title">{t("Connect a model to start")}</div>
+            <div className="setup-text">{t("Macron needs a language model: OpenAI, Anthropic, Gemini, OpenRouter, a local Ollama, or any compatible provider.")}</div>
           </div>
           <button type="button" className="btn primary" onClick={() => openDialog({ kind: "model-connect" })}>
-            Connect a model
+            {t("Connect a model")}
           </button>
         </div>
       )}
       <p>
         {isHome
-          ? "Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in."
-          : "Macron reads and changes files in this folder, runs commands here, and looks things up when it needs to."}
+          ? t("Conversations that don't belong to a project live here. Open a folder to give Macron a project to work in.")
+          : t("Macron reads and changes files in this folder, runs commands here, and looks things up when it needs to.")}
       </p>
       <dl className="keys">
         {keys.map(([label, combo]) => (

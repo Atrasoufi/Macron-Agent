@@ -1,7 +1,6 @@
 package desk
 
 import (
-	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -32,18 +31,19 @@ const (
 )
 
 type Block struct {
-	Kind    string `json:"kind"`
-	Text    string `json:"text,omitempty"`
-	HTML    string `json:"html,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Label   string `json:"label,omitempty"`
-	Arg     string `json:"arg,omitempty"`
-	Args    string `json:"args,omitempty"`
-	Summary string `json:"summary,omitempty"`
-	Output  string `json:"output,omitempty"`
-	Failed  bool   `json:"failed,omitempty"`
-	File    *File  `json:"file,omitempty"`
-	At      int64  `json:"at"`
+	Kind        string `json:"kind"`
+	Text        string `json:"text,omitempty"`
+	HTML        string `json:"html,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Label       string `json:"label,omitempty"`
+	Arg         string `json:"arg,omitempty"`
+	Args        string `json:"args,omitempty"`
+	Summary     string `json:"summary,omitempty"`
+	Output      string `json:"output,omitempty"`
+	Failed      bool   `json:"failed,omitempty"`
+	File        *File  `json:"file,omitempty"`
+	Attachments []File `json:"attachments,omitempty"`
+	At          int64  `json:"at"`
 }
 
 type File struct {
@@ -134,21 +134,24 @@ type project struct {
 	id   string
 	path string
 
-	mu       sync.Mutex
-	sess     Session
-	blocks   []Block
-	loaded   bool
-	live     Live
-	cancel   context.CancelFunc
-	queue    []string
-	yield    chan struct{}
-	stream   string
-	renderAt time.Time
-	toolSeq  int
-	updated  time.Time
-	mode     string
-	usageIn  int
-	usageOut int
+	mu            sync.Mutex
+	sess          Session
+	blocks        []Block
+	loaded        bool
+	live          Live
+	cancel        context.CancelFunc
+	queue         []string
+	yield         chan struct{}
+	stream        string
+	renderAt      time.Time
+	toolSeq       int
+	updated       time.Time
+	mode          string
+	usageIn       int
+	usageOut      int
+	activeThread  string
+	threads       []ThreadSummary
+	threadsLoaded bool
 }
 
 func projectID(path string) string {
@@ -178,7 +181,8 @@ func migrateProjectLog(dir, path string) {
 }
 
 func (p *project) file() string {
-	return filepath.Join(p.srv.host.DataDir(), "desktop", p.id+".jsonl")
+	p.loadThreadsLocked()
+	return p.threadFile(p.activeThread)
 }
 
 func (p *project) loadLocked() {
@@ -186,25 +190,9 @@ func (p *project) loadLocked() {
 		return
 	}
 	p.loaded = true
-	f, err := os.Open(p.file())
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64<<10), 8<<20)
-	for sc.Scan() {
-		var b Block
-		if json.Unmarshal(sc.Bytes(), &b) == nil {
-			p.blocks = append(p.blocks, b)
-		}
-	}
-	if len(p.blocks) > keepBlocks {
-		p.blocks = p.blocks[len(p.blocks)-keepBlocks:]
-	}
-	if n := len(p.blocks); n > 0 {
-		p.updated = time.UnixMilli(p.blocks[n-1].At)
-	}
+	p.loadThreadsLocked()
+	p.blocks, p.updated = p.readThreadBlocks(p.activeThread)
+	p.syncActiveThreadLocked()
 }
 
 func (p *project) appendLocked(b Block) Block {
@@ -225,6 +213,9 @@ func (p *project) appendLocked(b Block) Block {
 			_, _ = f.Write(append(raw, '\n'))
 			f.Close()
 		}
+	}
+	if b.Kind == "user" || b.Kind == "assistant" {
+		p.syncActiveThreadLocked()
 	}
 	return b
 }
@@ -289,7 +280,16 @@ func (p *project) snapshot() map[string]any {
 	}
 	live := p.live
 	live.Queued = append([]string(nil), p.queue...)
-	return map[string]any{"id": p.id, "path": p.path, "name": filepath.Base(p.path), "blocks": blocks, "live": live}
+	threads := append([]ThreadSummary(nil), p.threads...)
+	return map[string]any{
+		"id":      p.id,
+		"path":    p.path,
+		"name":    filepath.Base(p.path),
+		"blocks":  blocks,
+		"live":    live,
+		"thread":  p.activeThread,
+		"threads": threads,
+	}
 }
 
 func (p *project) emit(kind string, data map[string]any) {
@@ -303,6 +303,7 @@ func (p *project) emit(kind string, data map[string]any) {
 func (p *project) session() (Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.loadThreadsLocked()
 	if p.sess != nil {
 		return p.sess, nil
 	}
@@ -313,19 +314,51 @@ func (p *project) session() (Session, error) {
 	if p.mode != "" {
 		_ = s.SetMode(p.mode)
 	}
+	if ts, ok := s.(ThreadSession); ok {
+		ts.SetThread(p.activeThread)
+	}
 	p.sess = s
 	return s, nil
 }
 
 func (p *project) send(text string) error {
+	return p.sendWithAttachments(text, nil)
+}
+
+func (p *project) sendWithAttachments(text string, attachments []File) error {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	var clean []File
+	for _, a := range attachments {
+		if strings.TrimSpace(a.Name) == "" {
+			continue
+		}
+		clean = append(clean, a)
+	}
+	if text == "" && len(clean) == 0 {
 		return errors.New("empty message")
 	}
+
+	prompt := text
+	if len(clean) > 0 {
+		var sb strings.Builder
+		if prompt != "" {
+			sb.WriteString(prompt)
+			sb.WriteString("\n\n")
+		}
+		for _, a := range clean {
+			if strings.HasPrefix(a.Type, "image/") {
+				fmt.Fprintf(&sb, "[Attached image: %s (%s) — inspect with view_image if needed]\n", a.Name, a.Base)
+			} else {
+				fmt.Fprintf(&sb, "[Attached file: %s (%s)]\n", a.Name, a.Base)
+			}
+		}
+		prompt = strings.TrimSpace(sb.String())
+	}
+
 	p.mu.Lock()
 	p.loadLocked()
 	if p.live.Running {
-		p.queue = append(p.queue, text)
+		p.queue = append(p.queue, prompt)
 		if p.yield != nil {
 			close(p.yield)
 			p.yield = nil
@@ -341,7 +374,15 @@ func (p *project) send(text string) error {
 		return err
 	}
 	p.mu.Lock()
-	user := p.appendLocked(Block{Kind: "user", Text: text})
+	displayText := text
+	if displayText == "" && len(clean) > 0 {
+		names := make([]string, len(clean))
+		for i, a := range clean {
+			names[i] = a.Base
+		}
+		displayText = strings.Join(names, ", ")
+	}
+	user := p.appendLocked(Block{Kind: "user", Text: displayText, Attachments: clean})
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
 	p.live = Live{Running: true, Started: time.Now().UnixMilli()}
@@ -349,7 +390,7 @@ func (p *project) send(text string) error {
 	p.mu.Unlock()
 	p.emit("user", map[string]any{"block": user})
 	p.emit("state", map[string]any{"running": true, "started": time.Now().UnixMilli()})
-	go p.run(ctx, cancel, sess, text)
+	go p.run(ctx, cancel, sess, prompt)
 	return nil
 }
 

@@ -42,7 +42,7 @@ const (
 
 var projectNotes = []string{"MACRON.md", "AGENTS.md", "CLAUDE.md"}
 
-var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".tool-output/", ".run/", ".docindex/", ".widgets/", ".macron_page_watches/", ".macron_price_alerts/"}
+var hiddenWork = []string{machine.SubDir + "/", machine.JobsDir + "/", ".tool-output/", ".run/", ".docindex/", ".widgets/", ".macron-uploads/", ".macron_page_watches/", ".macron_price_alerts/"}
 
 func interactiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("TERM") != "dumb"
@@ -165,6 +165,24 @@ func (w *workspace) open(dir string) (*terminal, error) {
 		t.resumed = mc.Messages
 	}
 	return t, nil
+}
+
+func (t *terminal) currentUID() int64 {
+	t.modeMu.RLock()
+	uid := t.uid
+	t.modeMu.RUnlock()
+	return uid
+}
+
+func (t *terminal) SetThread(threadID string) {
+	key := t.dir
+	if tid := strings.TrimSpace(threadID); tid != "" && tid != "default" {
+		key = t.dir + "::" + tid
+	}
+	sum := sha256.Sum256([]byte(key))
+	t.modeMu.Lock()
+	t.uid = -int64(binary.BigEndian.Uint64(sum[8:16])>>2) - 1
+	t.modeMu.Unlock()
 }
 
 func (w *workspace) close() {
@@ -331,7 +349,7 @@ func (t *terminal) about(ctx context.Context) string {
 		parts = append(parts, "Project instructions ("+name+"):\n"+text)
 		break
 	}
-	if facts := t.bot.factsAbout(ctx, t.uid, false); facts != "" {
+	if facts := t.bot.factsAbout(ctx, t.currentUID(), false); facts != "" {
 		parts = append(parts, facts)
 	}
 	return strings.Join(parts, "\n\n")
@@ -343,13 +361,14 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 	if err := t.prov.Reload(ctx); err != nil {
 		return nil, err
 	}
-	mc, err := t.mem.Load(ctx, t.uid)
+	uid := t.currentUID()
+	mc, err := t.mem.Load(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 	modernizeHistory(mc.History)
 	window := t.window()
-	carry, compacted := t.bot.contextCarry(ctx, t.uid, mc)
+	carry, compacted := t.bot.contextCarry(ctx, uid, mc)
 	files := newFileTracker(t.app.Machine, t.session)
 	shownStart, shownEnd := l.OnToolStart, l.OnToolEnd
 	l.OnToolStart = func(name, args string) {
@@ -387,7 +406,7 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		MaxSteps:         t.app.Config.MaxSteps,
 		Listener:         l,
 		ToolYield:        yield,
-		Preload:          t.bot.sticky.get(t.uid),
+		Preload:          t.bot.sticky.get(uid),
 		Inbox: func() []llm.Message {
 			items := inbox()
 			takenMu.Lock()
@@ -409,7 +428,7 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		EfficientTools:  true,
 	})
 	if res != nil {
-		t.bot.sticky.keep(t.uid, res.Loaded)
+		t.bot.sticky.keep(uid, res.Loaded)
 	}
 	userTurn := text
 	takenMu.Lock()
@@ -449,50 +468,53 @@ func (t *terminal) remember(userTurn string, res *agent.Result, runErr error, ch
 			stored += "\n\n" + note
 		}
 	}
-	if err := t.mem.Append(ctx, t.uid, userTurn, stored); err != nil {
+	uid := t.currentUID()
+	if err := t.mem.Append(ctx, uid, userTurn, stored); err != nil {
 		log.Printf("terminal: saving the conversation: %v", err)
 		return
 	}
 	if res != nil {
-		t.bot.saveContextCarry(ctx, t.uid, res.Context, mc)
+		t.bot.saveContextCarry(ctx, uid, res.Context, mc)
 	}
 	t.tidy.Add(1)
-	go func() {
+	go func(targetUID int64) {
 		defer t.tidy.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if _, err := t.mem.Tidy(ctx, t.uid); err != nil {
+		if _, err := t.mem.Tidy(ctx, targetUID); err != nil {
 			log.Printf("terminal: compressing the conversation: %v", err)
 		}
-	}()
+	}(uid)
 }
 
 func (t *terminal) New(ctx context.Context) error {
-	if err := t.mem.Reset(ctx, t.uid); err != nil {
+	uid := t.currentUID()
+	if err := t.mem.Reset(ctx, uid); err != nil {
 		return err
 	}
-	_ = t.st.SetUserPref(ctx, t.uid, store.PrefContextMeter, "")
+	_ = t.st.SetUserPref(ctx, uid, store.PrefContextMeter, "")
 	t.gate.ForgetSession(t.session)
 	t.resumed = 0
 	return nil
 }
 
 func (t *terminal) Compact(ctx context.Context) (string, error) {
-	before, err := t.mem.Load(ctx, t.uid)
+	uid := t.currentUID()
+	before, err := t.mem.Load(ctx, uid)
 	if err != nil {
 		return "", err
 	}
 	if before.Messages == 0 {
 		return "Nothing to compact yet", nil
 	}
-	done, err := t.mem.Compress(ctx, t.uid)
+	done, err := t.mem.Compress(ctx, uid)
 	if err != nil {
 		return "", err
 	}
 	if !done {
 		return "The conversation is short already", nil
 	}
-	after, err := t.mem.Load(ctx, t.uid)
+	after, err := t.mem.Load(ctx, uid)
 	if err != nil {
 		return "Compacted", nil
 	}

@@ -1,12 +1,15 @@
 import { ApiError, fileURL, server, setBase } from "./api";
 import { local } from "./format";
+import { applyLang } from "./i18n";
+import type { Lang } from "./i18n";
 import { getState, setState } from "./store";
-import type { Dialog, Theme } from "./store";
-import type { Mode } from "./types";
+import type { Dialog, RightTab, Theme } from "./store";
+import type { FileRef, Mode, Snapshot } from "./types";
 
 export const composer = {
   focus: () => {},
   prepend: (_text: string) => {},
+  attachFiles: (_files: File[]) => {},
 };
 
 export const follow = { on: true };
@@ -17,12 +20,22 @@ export const stream = {
 
 const scoped = (id: string) => (getState().machine || "local") + ":" + id;
 
-let toastTimer = 0;
+let errorTimer = 0;
 
-export function toast(text: string, ms = 2600) {
-  setState((s) => ({ toast: { text, n: (s.toast?.n || 0) + 1 } }));
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => setState({ toast: null }), ms);
+// Routine white bottom notifications are intentionally disabled; UI controls reflect state directly.
+export function toast(_text: string, _ms = 2600) {
+  return;
+}
+
+export function clearError() {
+  window.clearTimeout(errorTimer);
+  setState({ errorAlert: null });
+}
+
+export function showError(text: string, ms = 7000) {
+  setState({ errorAlert: text });
+  window.clearTimeout(errorTimer);
+  errorTimer = window.setTimeout(() => setState({ errorAlert: null }), ms);
 }
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -33,7 +46,7 @@ export function errorText(err: unknown): string {
 }
 
 export function fail(err: unknown) {
-  toast(errorText(err), 5000);
+  showError(errorText(err), 7000);
 }
 
 const drafts: Record<string, string> = local.get("drafts", {});
@@ -103,11 +116,10 @@ export function effortNote(t: { effortSupport: string; effortValue: string; effo
   return t.effortSupport === "maybe" ? sent + " If the model refuses it, Macron steps down by itself." : sent;
 }
 
-export async function setTuning(field: "effort" | "window" | "temperature", value: string | number | null, done?: string) {
+export async function setTuning(field: "effort" | "window" | "temperature", value: string | number | null, _done?: string) {
   try {
     const t = await server.setTuning(field, value);
     setState({ tuning: t });
-    if (done) toast(done);
   } catch (e) {
     fail(e);
   }
@@ -122,15 +134,7 @@ export function refreshState() {
   }, 250);
 }
 
-let opening = 0;
-
-export async function openProject(id: string) {
-  const n = ++opening;
-  follow.on = true;
-  setState({ current: id, sideOpen: false });
-  local.set("project:" + (getState().machine || "local"), id);
-  const snap = await server.project(id);
-  if (n !== opening) return;
+function applySnapshot(snap: Snapshot) {
   const blocks = snap.blocks || [];
   const live = snap.live || { running: false };
   setState((s) => ({
@@ -138,14 +142,76 @@ export async function openProject(id: string) {
     fresh: blocks.length,
     live,
     lastTook: 0,
+    activeThread: snap.thread || s.activeThread,
+    threads: snap.threads || s.threads,
     dialog: live.ask ? { kind: "ask", ask: live.ask } : s.dialog?.kind === "ask" ? null : s.dialog,
   }));
 }
 
-export async function send(text: string): Promise<boolean> {
+let opening = 0;
+
+export async function openProject(id: string) {
+  const n = ++opening;
   follow.on = true;
+  setState({ current: id, sideOpen: false, changes: null });
+  local.set("project:" + (getState().machine || "local"), id);
+  const snap = await server.project(id);
+  if (n !== opening) return;
+  applySnapshot(snap);
+  loadChanges(id);
+}
+
+export async function loadChanges(id = getState().current) {
+  if (!id) return;
   try {
-    await server.send(getState().current, text);
+    const ch = await server.changes(id);
+    if (getState().current === id) setState({ changes: ch });
+  } catch {
+    // Ignore errors when remote engine is older.
+  }
+}
+
+export async function revertFile(path: string): Promise<boolean> {
+  const id = getState().current;
+  if (!id) return false;
+  try {
+    await server.revert(id, path);
+    await loadChanges(id);
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+export function setRightTab(tab: RightTab) {
+  if (tab === "changes") {
+    local.set("changesOpen", true);
+    setState({ rightTab: "changes", changesOpen: true });
+    loadChanges();
+  } else {
+    local.set("planOpen", true);
+    setState({ rightTab: "plan", planOpen: true });
+  }
+}
+
+export function toggleChanges(open?: boolean) {
+  setState((s) => {
+    const next = open ?? !(s.changesOpen && s.rightTab === "changes");
+    local.set("changesOpen", next);
+    if (next) {
+      loadChanges(s.current);
+      return { changesOpen: true, rightTab: "changes" };
+    }
+    return { changesOpen: false };
+  });
+}
+
+export async function send(text: string, attachments?: FileRef[]): Promise<boolean> {
+  follow.on = true;
+  clearError();
+  try {
+    await server.send(getState().current, text, attachments);
     return true;
   } catch (e) {
     fail(e);
@@ -165,11 +231,36 @@ export async function stop() {
 
 export async function newChat() {
   const s = getState();
-  if (s.live.running) return toast("Stop the current job first");
+  if (s.live.running) return showError("Stop the current job first");
   try {
-    await server.newChat(s.current);
-    toast("New conversation");
+    const res = await server.newChat(s.current);
+    if (res.snapshot) applySnapshot(res.snapshot);
     composer.focus();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+export async function switchThread(tid: string) {
+  const s = getState();
+  if (s.live.running) return showError("Stop the current job first");
+  if (tid === s.activeThread) return;
+  try {
+    const snap = await server.switchThread(s.current, tid);
+    applySnapshot(snap);
+    composer.focus();
+  } catch (e) {
+    fail(e);
+  }
+}
+
+export async function deleteThread(tid: string) {
+  const s = getState();
+  if (s.live.running) return showError("Stop the current job first");
+  try {
+    const res = await server.deleteThread(s.current, tid);
+    if (res.snapshot) applySnapshot(res.snapshot);
+    else setState({ activeThread: res.active, threads: res.threads });
   } catch (e) {
     fail(e);
   }
@@ -177,11 +268,9 @@ export async function newChat() {
 
 export async function compact() {
   const s = getState();
-  if (s.live.running) return toast("Wait for the current job to finish");
-  toast("Compacting the conversation…", 120000);
+  if (s.live.running) return showError("Wait for the current job to finish");
   try {
     await server.compact(s.current);
-    toast("Conversation compacted");
   } catch (e) {
     fail(e);
   }
@@ -191,7 +280,6 @@ export async function setMode(mode: Mode) {
   try {
     const r = await server.setMode(mode);
     setState({ mode: r.mode, info: r.info });
-    toast(mode === "plan" ? "Plan mode: Macron plans and changes nothing" : "Build mode: Macron can make changes");
   } catch (e) {
     fail(e);
   }
@@ -205,7 +293,6 @@ export async function chooseModel(name: string) {
   try {
     const r = await server.setModel(name);
     setState({ info: r.info });
-    toast("Model: " + name);
   } catch (e) {
     fail(e);
   }
@@ -229,7 +316,6 @@ export async function answer(choice: "once" | "session" | "always" | "deny") {
   composer.focus();
   try {
     await server.answer(s.current, d.ask.id, choice);
-    if (choice === "always") toast("Allowed from now on");
   } catch (e) {
     fail(e);
   }
@@ -262,6 +348,33 @@ export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 }
 
+export function setLang(lang: Lang) {
+  local.set("lang", lang);
+  applyLang(lang);
+  setState({ lang });
+}
+
+export async function checkUpdate(force = false) {
+  try {
+    const st = await server.checkUpdate(force);
+    setState({ update: st });
+    return st;
+  } catch {
+    return null;
+  }
+}
+
+export async function installUpdate() {
+  setState((s) => ({ update: s.update ? { ...s.update, installing: true, error: "" } : null }));
+  try {
+    const st = await server.installUpdate();
+    setState({ update: st });
+  } catch (e) {
+    setState((s) => ({ update: s.update ? { ...s.update, installing: false, error: errorText(e) } : null }));
+    fail(e);
+  }
+}
+
 export async function loadServers() {
   try {
     const r = await server.servers();
@@ -271,29 +384,20 @@ export async function loadServers() {
   }
 }
 
-function serverName(id: string): string {
-  return getState().servers.find((x) => x.id === id)?.name || "the server";
-}
-
 export async function connectServer(id: string, secrets: { password?: string; passphrase?: string; trust?: string } = {}): Promise<boolean> {
-  const name = serverName(id);
   setState((s) => ({ servers: s.servers.map((x) => (x.id === id ? { ...x, state: "connecting", error: "" } : x)) }));
-  toast(`Connecting to ${name}…`, 120000);
   try {
     const r = await server.connectServer(id, secrets);
     await loadServers();
     if (r.need) {
-      setState({ toast: null });
       openDialog({ kind: "server-auth", id, need: r.need, fingerprint: r.fingerprint, message: r.message });
       return false;
     }
-    toast(`Connected to ${name}`);
     return true;
   } catch (e) {
     await loadServers();
     const msg = errorText(e);
     if (/not installed|too old/i.test(msg)) {
-      setState({ toast: null });
       openDialog({ kind: "server-install", id, update: /too old/i.test(msg) });
       return false;
     }
@@ -310,7 +414,6 @@ export async function installOnServer(id: string, secrets: { password?: string; 
     return "";
   }
   setState({ dialog: null });
-  toast(`Macron is on ${serverName(id)} now. Connecting…`);
   await switchMachine(id);
   return r.output || "";
 }
@@ -327,7 +430,21 @@ export async function switchMachine(id: string) {
     if (srv.state !== "ready" && !(await connectServer(id))) return;
   }
   setBase(id ? "/remote/" + encodeURIComponent(id) : "");
-  setState({ machine: id, projects: [], blocks: [], fresh: 0, current: "", live: { running: false }, dialog: null, online: null, sideOpen: false, lastTook: 0 });
+  setState({
+    machine: id,
+    projects: [],
+    blocks: [],
+    fresh: 0,
+    current: "",
+    changes: null,
+    threads: [],
+    activeThread: "default",
+    live: { running: false },
+    dialog: null,
+    online: null,
+    sideOpen: false,
+    lastTook: 0,
+  });
   stream.reconnect();
 }
 

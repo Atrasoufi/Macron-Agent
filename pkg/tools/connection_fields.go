@@ -88,3 +88,25 @@ func describeConnection(s ConnectionSpec) string {
 	raw, _ := json.Marshal(out)
 	return string(raw)
 }
+
+// ConnectionFieldMeta returns metadata for a known service connection setting key.
+type ConnectionFieldInfo struct {
+	Key     string `json:"key"`
+	Type    string `json:"type"`
+	Purpose string `json:"purpose"`
+	Default string `json:"default,omitempty"`
+	Secret  bool   `json:"secret"`
+	Set     bool   `json:"set"`
+}
+
+func ConnectionFieldMeta(key string) ConnectionFieldInfo {
+	f := connectionFields[key]
+	return ConnectionFieldInfo{
+		Key:     key,
+		Type:    f.Type,
+		Purpose: f.Purpose,
+		Default: f.Default,
+		Secret:  f.Secret,
+		Set:     strings.TrimSpace(config.ToolEnvValue(key)) != "",
+	}
+}

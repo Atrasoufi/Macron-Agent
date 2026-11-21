@@ -1,15 +1,18 @@
-import { useEffect, useRef } from "react";
-import { applyTheme, closeDialog, composer, newChat, openDialog, stop, toggleMode } from "./actions";
+import { useEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
+import { applyTheme, clearError, closeDialog, composer, newChat, openDialog, stop, toggleMode } from "./actions";
 import { Composer } from "./components/Composer";
 import { Dialogs } from "./components/Dialogs";
-import { Welcome } from "./components/Welcome";
-import { PlanPanel, usePanelPlan } from "./components/PlanPanel";
 import { Feed } from "./components/Feed";
 import { Header } from "./components/Header";
 import { LiveCard } from "./components/Live";
+import { PlanPanel, useRightPanelVisible } from "./components/PlanPanel";
 import { Sidebar } from "./components/Sidebar";
+import { Welcome } from "./components/Welcome";
 import { connect } from "./events";
 import { useProjectName } from "./hooks";
+import { applyLang, useT } from "./i18n";
+import { Icon } from "./icons";
 import { getState, setState, useStore } from "./store";
 
 function useShortcuts() {
@@ -96,22 +99,31 @@ function useTitle() {
   }, []);
 }
 
-function Toast() {
-  const t = useStore((s) => s.toast);
-  const last = useRef("");
-  if (t) last.current = t.text;
+function ErrorBanner() {
+  const t = useT();
+  const err = useStore((s) => s.errorAlert);
+  if (!err) return null;
   return (
-    <div className={"toast" + (t ? " on" : "")} role="status" aria-live="polite">
-      {t ? t.text : last.current}
+    <div className="err-banner" role="alert">
+      <Icon name="alert" size={14} />
+      <span className="grow" dir="auto">
+        {err}
+      </span>
+      <button type="button" className="icon-btn sm" title={t("Dismiss")} aria-label={t("Dismiss")} onClick={clearError}>
+        <Icon name="x" size={13} />
+      </button>
     </div>
   );
 }
 
 export function App() {
+  const t = useT();
   const theme = useStore((s) => s.theme);
+  const lang = useStore((s) => s.lang);
   const sideOpen = useStore((s) => s.sideOpen);
-  const planOpen = useStore((s) => s.planOpen);
-  const withPlan = usePanelPlan().length > 0 && planOpen;
+  const withRight = useRightPanelVisible();
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
 
   useEffect(() => {
     applyTheme(theme);
@@ -121,25 +133,64 @@ export function App() {
     return () => mq.removeEventListener("change", follow);
   }, [theme]);
 
+  useEffect(() => {
+    applyLang(lang);
+  }, [lang]);
+
   useEffect(() => connect(), []);
   useShortcuts();
   useTitle();
   useNative();
 
+  const onDragEnter = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current++;
+    setDragging(true);
+  };
+
+  const onDragLeave = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+
+  const onDragOver = (e: DragEvent<HTMLElement>) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+  };
+
+  const onDrop = (e: DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length) composer.attachFiles(files);
+  };
+
   return (
-    <div className={"app" + (sideOpen ? " side-open" : "") + (withPlan ? " with-plan" : "")}>
+    <div className={"app" + (sideOpen ? " side-open" : "") + (withRight ? " with-plan" : "")}>
       <Sidebar />
       <div className="scrim" onClick={() => setState({ sideOpen: false })} />
-      <main className="main">
+      <main className="main" onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={onDrop}>
         <Header />
         <Feed />
         <LiveCard />
+        <ErrorBanner />
         <Composer />
+        {dragging && (
+          <div className="drop-veil">
+            <div className="drop-box">
+              <Icon name="paperclip" size={24} />
+              <span>{t("Drop files or images here to attach")}</span>
+            </div>
+          </div>
+        )}
       </main>
       <PlanPanel />
       <Dialogs />
       <Welcome />
-      <Toast />
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from "react";
 import { local } from "./format";
-import type { Ask, Block, Info, Live, Mode, ServerView, Summary, Tuning } from "./types";
+import type { Lang } from "./i18n";
+import type { Ask, Block, ChangesResponse, Info, Live, Mode, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
 
 export type Theme = "system" | "dark" | "light";
+export type RightTab = "plan" | "changes";
 
 export type Dialog =
   | { kind: "ask"; ask: Ask }
@@ -33,10 +35,17 @@ export interface State {
   live: Live;
   lastTook: number;
   dialog: Dialog;
-  toast: { text: string; n: number } | null;
+  errorAlert: string | null;
   theme: Theme;
+  lang: Lang;
   sideOpen: boolean;
   planOpen: boolean;
+  changesOpen: boolean;
+  rightTab: RightTab;
+  changes: ChangesResponse | null;
+  activeThread: string;
+  threads: ThreadSummary[];
+  update: UpdateStatus | null;
   unseen: boolean;
 }
 
@@ -73,10 +82,17 @@ let state: State = {
   live: { running: false },
   lastTook: 0,
   dialog: null,
-  toast: null,
+  errorAlert: null,
   theme: local.get<Theme>("theme", "system"),
+  lang: local.get<Lang>("lang", "en"),
   sideOpen: false,
   planOpen: local.get("planOpen", true),
+  changesOpen: local.get("changesOpen", false),
+  rightTab: "plan",
+  changes: null,
+  activeThread: "default",
+  threads: [],
+  update: null,
   unseen: false,
 };
 

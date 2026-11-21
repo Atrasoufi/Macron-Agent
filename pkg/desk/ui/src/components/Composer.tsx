@@ -1,9 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
-import { compact, composer, draftFor, effortAbout, effortLevels, effortName, effortNote, newChat, openDialog, saveDraft, send, setMode, setTuning, stop } from "../actions";
-import { tokens, took } from "../format";
+import type { ClipboardEvent, KeyboardEvent } from "react";
+import { compact, composer, draftFor, effortAbout, effortLevels, effortName, effortNote, fail, newChat, openDialog, saveDraft, send, setMode, setTuning, stop, toggleChanges } from "../actions";
+import { fileURL, server } from "../api";
+import { bytes, tokens, took } from "../format";
+import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
+import type { FileRef } from "../types";
 
 type Command = { name: string; hint: string; run: () => void };
 
@@ -13,13 +16,15 @@ const COMMANDS: Command[] = [
   { name: "/model", hint: "Pick the model", run: () => openDialog({ kind: "palette", mode: "models" }) },
   { name: "/plan", hint: "Plan first and change nothing", run: () => setMode("plan") },
   { name: "/build", hint: "Let Macron make changes", run: () => setMode("build") },
+  { name: "/changes", hint: "View git changes and diff", run: () => toggleChanges(true) },
+  { name: "/execution", hint: "Switch execution isolation mode", run: () => openDialog({ kind: "settings" }) },
   { name: "/open", hint: "Open another folder", run: () => openDialog({ kind: "folder" }) },
   { name: "/settings", hint: "Approvals, providers and theme", run: () => openDialog({ kind: "settings" }) },
   { name: "/stop", hint: "Stop the current job", run: () => stop() },
 ];
 
-function SendStop({ running, hasText, fly, onSend }: { running: boolean; hasText: boolean; fly: number; onSend: () => void }) {
-  const state = running ? (hasText ? "queue" : "stop") : hasText ? "ready" : "idle";
+function SendStop({ running, hasContent, fly, onSend }: { running: boolean; hasContent: boolean; fly: number; onSend: () => void }) {
+  const state = running ? (hasContent ? "queue" : "stop") : hasContent ? "ready" : "idle";
   const title = state === "stop" ? "Stop (Esc)" : state === "queue" ? "Send now; Macron reads it at its next step (Enter)" : "Send (Enter)";
   return (
     <div className={"actions " + state}>
@@ -61,6 +66,7 @@ function Meter() {
 }
 
 function ModeSwitch() {
+  const t = useT();
   const mode = useStore((s) => s.mode);
   return (
     <div className="mode" role="radiogroup" aria-label="Mode">
@@ -71,10 +77,10 @@ function ModeSwitch() {
           role="radio"
           aria-checked={mode === m}
           className={mode === m ? "on" : ""}
-          title={m === "plan" ? "Plan first; nothing changes until you say so" : "Macron can change files and run commands"}
+          title={m === "plan" ? t("Plan first and change nothing") : t("Let Macron make changes")}
           onClick={() => mode !== m && setMode(m)}
         >
-          {m === "plan" ? "Plan" : "Build"}
+          {m === "plan" ? t("Plan") : t("Build")}
         </button>
       ))}
     </div>
@@ -133,7 +139,7 @@ function EffortMenu() {
               className={"em-row" + (l === t.effort ? " on" : "")}
               onClick={() => {
                 setOpen(false);
-                if (l !== t.effort) setTuning("effort", l || "auto", "Effort: " + effortName(l));
+                if (l !== t.effort) setTuning("effort", l || "auto");
               }}
             >
               <Gauge level={i} />
@@ -152,37 +158,75 @@ function EffortMenu() {
 }
 
 function ModelButton() {
+  const tr = useT();
   const model = useStore((s) => s.info.model);
   const provider = useStore((s) => s.info.provider);
   return (
     <button
       type="button"
       className={"model" + (model ? "" : " missing")}
-      title={provider ? `${provider} · change the model` : "Connect a model"}
+      title={provider ? `${provider} · change the model` : tr("Connect a model")}
       onClick={() => openDialog(model ? { kind: "palette", mode: "models" } : { kind: "model-connect" })}
     >
-      <span>{model || "Connect a model"}</span>
+      <span>{model || tr("Connect a model")}</span>
       <Icon name="down" size={12} />
     </button>
   );
 }
 
+function activeAtToken(text: string, caret: number): { start: number; query: string } | null {
+  const head = text.slice(0, caret);
+  const match = head.match(/(?:^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  const query = match[1] || "";
+  const start = caret - query.length - 1;
+  return { start, query };
+}
+
 export function Composer() {
+  const tr = useT();
   const current = useStore((s) => s.current);
   const running = useStore((s) => s.live.running);
   const queued = useStore((s) => s.live.queued?.length || 0);
   const mode = useStore((s) => s.mode);
   const [text, setText] = useState("");
+  const [caret, setCaret] = useState(0);
   const [sel, setSel] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
+  const [atDismissed, setAtDismissed] = useState(false);
+  const [atFiles, setAtFiles] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<FileRef[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [fly, setFly] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const idRef = useRef(current);
 
   useEffect(() => {
     idRef.current = current;
     setText(draftFor(current));
+    setAttachments([]);
+    setAtFiles([]);
   }, [current]);
+
+  const uploadFiles = async (files: File[]) => {
+    const pid = idRef.current;
+    if (!pid || !files.length) return;
+    setUploading((n) => n + files.length);
+    for (const f of files) {
+      try {
+        const uploaded = await server.upload(pid, f);
+        if (idRef.current === pid) {
+          setAttachments((prev) => [...prev, uploaded]);
+        }
+      } catch (e) {
+        fail(e);
+      } finally {
+        setUploading((n) => Math.max(0, n - 1));
+      }
+    }
+    ref.current?.focus({ preventScroll: true });
+  };
 
   useEffect(() => {
     composer.focus = () => ref.current?.focus({ preventScroll: true });
@@ -192,6 +236,9 @@ export function Composer() {
         saveDraft(idRef.current, next);
         return next;
       });
+    composer.attachFiles = (files: File[]) => {
+      void uploadFiles(files);
+    };
     ref.current?.focus({ preventScroll: true });
   }, []);
 
@@ -204,11 +251,63 @@ export function Composer() {
 
   const matches = useMemo(() => (!slashDismissed && text.startsWith("/") && !/\s/.test(text) ? COMMANDS.filter((c) => c.name.startsWith(text.toLowerCase())) : []), [text, slashDismissed]);
 
-  const change = (v: string) => {
+  const atMatch = useMemo(() => {
+    if (atDismissed || matches.length > 0) return null;
+    return activeAtToken(text, caret);
+  }, [text, caret, atDismissed, matches.length]);
+
+  useEffect(() => {
+    if (!atMatch || !current) {
+      setAtFiles([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      server
+        .projectFiles(current, atMatch.query)
+        .then((r) => {
+          if (alive) {
+            setAtFiles((r.files || []).slice(0, 12));
+            setSel(0);
+          }
+        })
+        .catch(() => {
+          if (alive) setAtFiles([]);
+        });
+    }, 80);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [current, atMatch?.query, atMatch !== null]);
+
+  const change = (v: string, pos?: number) => {
     setSlashDismissed(false);
+    setAtDismissed(false);
     setText(v);
+    setCaret(pos ?? v.length);
     setSel(0);
     saveDraft(current, v);
+  };
+
+  const insertFileMention = (file: string) => {
+    if (!atMatch) return;
+    const before = text.slice(0, atMatch.start);
+    const after = text.slice(caret);
+    const insert = `@${file} `;
+    const next = before + insert + after;
+    const nextPos = before.length + insert.length;
+    setAtFiles([]);
+    setAtDismissed(true);
+    setText(next);
+    setCaret(nextPos);
+    saveDraft(current, next);
+    window.requestAnimationFrame(() => {
+      if (ref.current) {
+        ref.current.focus();
+        ref.current.setSelectionRange(nextPos, nextPos);
+      }
+    });
   };
 
   const run = (c: Command) => {
@@ -218,16 +317,59 @@ export function Composer() {
 
   const submit = async () => {
     const t = text.trim();
-    if (!t) return;
-    const cmd = COMMANDS.find((c) => c.name === t.toLowerCase());
-    if (cmd) return run(cmd);
+    if (!t && attachments.length === 0) return;
+    if (attachments.length === 0) {
+      const cmd = COMMANDS.find((c) => c.name === t.toLowerCase());
+      if (cmd) return run(cmd);
+    }
+    const pending = [...attachments];
     change("");
+    setAttachments([]);
     setFly((n) => n + 1);
-    if (!(await send(t))) change(t);
+    if (!(await send(t, pending))) {
+      change(t);
+      setAttachments(pending);
+    }
+  };
+
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const files: File[] = [];
+    for (const item of items) {
+      if (item.kind === "file") {
+        const f = item.getAsFile();
+        if (f) {
+          const named = f.name ? f : new File([f], `screenshot-${Date.now()}.png`, { type: f.type || "image/png" });
+          files.push(named);
+        }
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      void uploadFiles(files);
+    }
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
+    if (atMatch && atFiles.length > 0) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setAtDismissed(true);
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSel((i) => (i + (e.key === "ArrowDown" ? 1 : atFiles.length - 1)) % atFiles.length);
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        insertFileMention(atFiles[Math.min(sel, atFiles.length - 1)]);
+        return;
+      }
+    }
     if (matches.length) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -253,10 +395,10 @@ export function Composer() {
   };
 
   const placeholder = running
-    ? "Add to what Macron is doing, or press Esc to stop"
+    ? tr("Add to what Macron is doing, or press Esc to stop")
     : mode === "plan"
-      ? "Describe the goal; Macron plans first and changes nothing"
-      : "Ask Macron to build, fix, research or automate something";
+      ? tr("Describe the goal; Macron plans first and changes nothing")
+      : tr("Ask Macron to build, fix, research or automate something");
 
   return (
     <footer className="composer">
@@ -275,21 +417,108 @@ export function Composer() {
               }}
             >
               <span className="cmd">{c.name}</span>
-              <span className="meta">{c.hint}</span>
+              <span className="meta">{tr(c.hint)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {atMatch && atFiles.length > 0 && (
+        <div className="slash at-menu" role="listbox">
+          {atFiles.map((f, i) => (
+            <button
+              key={f}
+              type="button"
+              role="option"
+              aria-selected={i === sel}
+              className={"item" + (i === sel ? " sel" : "")}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insertFileMention(f);
+              }}
+            >
+              <Icon name="file" size={13} />
+              <span className="at-path" dir="ltr">
+                {f}
+              </span>
             </button>
           ))}
         </div>
       )}
       <div className={"box" + (mode === "plan" ? " plan" : "") + (running ? " busy" : "")}>
-        <textarea ref={ref} rows={1} dir="auto" value={text} placeholder={placeholder} onChange={(e) => change(e.target.value)} onKeyDown={onKey} />
+        {(attachments.length > 0 || uploading > 0) && (
+          <div className="att-bar">
+            {attachments.map((a) => {
+              const isImg = (a.type || "").startsWith("image/");
+              return (
+                <span key={a.name} className="att-chip" title={a.base}>
+                  {isImg ? <img className="att-thumb" src={fileURL(current, a.name)} alt={a.base} /> : <Icon name="file" size={13} />}
+                  <span className="att-name" dir="ltr">
+                    {a.base}
+                  </span>
+                  <span className="att-size">{bytes(a.size)}</span>
+                  <button
+                    type="button"
+                    className="att-rm"
+                    aria-label={tr("Remove")}
+                    onClick={() => setAttachments((prev) => prev.filter((x) => x.name !== a.name))}
+                  >
+                    <Icon name="x" size={11} />
+                  </button>
+                </span>
+              );
+            })}
+            {uploading > 0 && (
+              <span className="att-chip uploading">
+                <span className="spin" />
+                <span>{tr("Uploading…")}</span>
+              </span>
+            )}
+          </div>
+        )}
+        <textarea
+          ref={ref}
+          rows={1}
+          dir="auto"
+          value={text}
+          placeholder={placeholder}
+          onPaste={onPaste}
+          onClick={(e) => setCaret(e.currentTarget.selectionStart || 0)}
+          onKeyUp={(e) => setCaret(e.currentTarget.selectionStart || 0)}
+          onChange={(e) => change(e.target.value, e.target.selectionStart || 0)}
+          onKeyDown={onKey}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            e.target.value = "";
+            if (files.length) void uploadFiles(files);
+          }}
+        />
         <div className="toolbar">
           <ModeSwitch />
+          <button
+            type="button"
+            className="icon-btn sm attach-btn"
+            title={tr("Attach files or images")}
+            aria-label={tr("Attach files or images")}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Icon name="paperclip" size={15} />
+          </button>
           <ModelButton />
           <EffortMenu />
           <span className="grow" />
-          {queued > 0 && <span className="queued">{queued} waiting</span>}
+          {queued > 0 && (
+            <span className="queued">
+              {queued} {tr("waiting")}
+            </span>
+          )}
           <Meter />
-          <SendStop running={running} hasText={text.trim().length > 0} fly={fly} onSend={submit} />
+          <SendStop running={running} hasContent={text.trim().length > 0 || attachments.length > 0} fly={fly} onSend={submit} />
         </div>
       </div>
     </footer>

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Metixpro/macron-agent/pkg/app"
@@ -139,5 +141,75 @@ func TestBotSetExecutionMode_FailClosedAndSwitch(t *testing.T) {
 	}
 	if b.executionMode() != "local" || cfg.ExecutionMode != "local" {
 		t.Fatalf("expected bot and config mode to update to local, got %q / %q", b.executionMode(), cfg.ExecutionMode)
+	}
+}
+
+func TestSwitchExecutionMode_RollsBackOnPersistFailure(t *testing.T) {
+	t.Setenv(envExecutionMode, "")
+	t.Setenv("MACRON_SANDBOX", "")
+
+	m, err := machine.New(machine.Config{
+		BaseDir:       t.TempDir(),
+		Sandbox:       machine.SandboxOff,
+		ExecutionMode: "best-effort",
+	})
+	if err != nil {
+		t.Fatalf("unexpected machine init error: %v", err)
+	}
+
+	cfg := &config.Config{ExecutionMode: "best-effort"}
+	a := &app.App{Config: cfg, Machine: m}
+	saveErr := errors.New("disk full")
+
+	_, err = switchExecutionMode(context.Background(), a, func(context.Context, string, string) error {
+		return saveErr
+	}, "local")
+	if !errors.Is(err, saveErr) {
+		t.Fatalf("expected wrapped save error %v, got %v", saveErr, err)
+	}
+	if m.ExecutionMode() != "best-effort" {
+		t.Fatalf("expected machine mode to roll back to %q, got %q", "best-effort", m.ExecutionMode())
+	}
+	if cfg.ExecutionMode != "best-effort" {
+		t.Fatalf("expected config mode to remain %q, got %q", "best-effort", cfg.ExecutionMode)
+	}
+}
+
+func TestSwitchExecutionMode_ConcurrentSafe(t *testing.T) {
+	t.Setenv(envExecutionMode, "")
+	t.Setenv("MACRON_SANDBOX", "")
+
+	m, err := machine.New(machine.Config{
+		BaseDir:       t.TempDir(),
+		Sandbox:       machine.SandboxOff,
+		ExecutionMode: "best-effort",
+	})
+	if err != nil {
+		t.Fatalf("unexpected machine init error: %v", err)
+	}
+
+	cfg := &config.Config{ExecutionMode: "best-effort"}
+	a := &app.App{Config: cfg, Machine: m}
+
+	var wg sync.WaitGroup
+	modes := []string{"local", "best-effort"}
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				mode := modes[(id+j)%len(modes)]
+				if _, err := switchExecutionMode(context.Background(), a, func(context.Context, string, string) error {
+					return nil
+				}, mode); err != nil {
+					t.Errorf("unexpected switch error: %v", err)
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if m.ExecutionMode() != cfg.ExecutionMode {
+		t.Fatalf("expected machine mode %q to match config mode %q", m.ExecutionMode(), cfg.ExecutionMode)
 	}
 }

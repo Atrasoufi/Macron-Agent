@@ -2,6 +2,7 @@ package machine
 
 import (
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -172,4 +173,37 @@ func TestSetExecutionMode_SwitchAndValidation(t *testing.T) {
 	if m.ExecutionMode() != "best-effort" {
 		t.Fatalf("expected execution mode %q, got %q", "best-effort", m.ExecutionMode())
 	}
+}
+
+func TestSetExecutionMode_ConcurrentSafe(t *testing.T) {
+	clearExecEnv(t)
+
+	m, err := New(Config{
+		BaseDir:       t.TempDir(),
+		Sandbox:       SandboxOff,
+		ExecutionMode: "best-effort",
+	})
+	if err != nil {
+		t.Fatalf("unexpected init error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				mode := "local"
+				if (id+j)%2 == 0 {
+					mode = "best-effort"
+				}
+				if _, err := m.SetExecutionMode(mode); err != nil {
+					t.Errorf("unexpected SetExecutionMode error: %v", err)
+				}
+				_ = m.ExecutionMode()
+				_ = m.Sandboxed()
+			}
+		}(i)
+	}
+	wg.Wait()
 }

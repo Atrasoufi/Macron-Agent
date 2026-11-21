@@ -174,6 +174,9 @@ func (s *Machine) SetExecutionMode(mode string) (string, error) {
 		return "", fmt.Errorf("invalid execution mode %q (use local, sandbox, or best-effort)", mode)
 	}
 
+	s.shellStart.Lock()
+	defer s.shellStart.Unlock()
+
 	s.sbMu.RLock()
 	nextCfg := s.cfg
 	s.sbMu.RUnlock()
@@ -196,14 +199,17 @@ func (s *Machine) SetExecutionMode(mode string) (string, error) {
 func (s *Machine) stopAllShells() {
 	s.mu.Lock()
 	var open []*shell
-	for _, sh := range s.shells {
+	for ws, sh := range s.shells {
 		if sh != nil {
 			open = append(open, sh)
 		}
+		delete(s.shells, ws)
 	}
 	s.mu.Unlock()
 	for _, sh := range open {
 		sh.stop("execution mode changed")
+	}
+	for _, sh := range open {
 		<-sh.done
 	}
 }

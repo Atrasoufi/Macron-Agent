@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,9 @@ func newSandbox(cfg Config) (*sandbox, string, error) {
 	bw, err := exec.LookPath("bwrap")
 	if err != nil {
 		msg := "bwrap is not installed (apt install bubblewrap)"
+		if runtime.GOOS != "linux" {
+			msg = "bwrap is not installed (bubblewrap sandbox is only available on Linux)"
+		}
 		if execMode == "sandbox" {
 			return nil, "", fmt.Errorf("%s, but strict sandbox mode is required", msg)
 		}

@@ -42,6 +42,7 @@ const (
 	EnvTelegramLocal = "MACRON_TELEGRAM_LOCAL"
 	EnvSandbox       = "MACRON_SANDBOX"
 	EnvSandboxNoNet  = "MACRON_SANDBOX_NO_NET"
+	EnvExecutionMode = "MACRON_EXECUTION_MODE"
 )
 
 const DefaultModel = "claude-sonnet-5"
@@ -157,7 +158,7 @@ func (c *Config) Bind(fs *flag.FlagSet) {
 	fs.StringVar(&c.Sandbox, "sandbox", envOr(EnvSandbox, ""), "sandbox backend for code and commands (bwrap or off; env "+EnvSandbox+")")
 	fs.BoolVar(&c.SandboxNoNet, "sandbox-no-net", envBool(EnvSandboxNoNet), "disable network access inside the sandbox (env "+EnvSandboxNoNet+")")
 
-	fs.StringVar(&c.ExecutionMode, "execution-mode", envOr("MACRON_EXECUTION_MODE", "best-effort"), "execution mode: local, sandbox, or best-effort")
+	fs.StringVar(&c.ExecutionMode, "execution-mode", envOr(EnvExecutionMode, "best-effort"), "execution mode: local, sandbox, or best-effort (env "+EnvExecutionMode+")")
 
 	c.GitHubToken = os.Getenv(EnvGitHubToken)
 	c.TregToken = os.Getenv(EnvTregToken)

@@ -1079,14 +1079,19 @@ function Settings() {
     }
   };
 
+  const isLinux = !info.platform || info.platform === "linux";
   const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
   const executionHelp = {
     sandbox: info.sandboxed
       ? "Strict bubblewrap isolation is active (fail-closed)."
-      : "Strict bubblewrap isolation (fail-closed if unavailable).",
+      : isLinux
+        ? "Strict bubblewrap isolation (fail-closed if unavailable)."
+        : "Strict bubblewrap isolation is only available on Linux.",
     "best-effort": info.sandboxed
       ? "Sandbox active; falls back to local if unavailable."
-      : "Unsandboxed; uses bubblewrap when available.",
+      : isLinux
+        ? "Unsandboxed; uses bubblewrap when available."
+        : "Unsandboxed (bubblewrap sandbox is Linux-only).",
     local: "Sandbox bypassed. Commands run directly on the host.",
   }[executionMode];
 

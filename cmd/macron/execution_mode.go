@@ -4,17 +4,22 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/Metixpro/macron-agent/pkg/app"
 	"github.com/Metixpro/macron-agent/pkg/config"
 )
 
 const (
 	settingExecutionMode = "execution_mode"
-	envExecutionMode     = "MACRON_EXECUTION_MODE"
+	envExecutionMode     = config.EnvExecutionMode
 )
+
+var executionModeMu sync.Mutex
 
 func normalizeExecutionMode(v string) (string, bool) {
 	switch m := strings.ToLower(strings.TrimSpace(v)); m {
@@ -56,6 +61,37 @@ func applySavedExecutionMode(cfg *config.Config, getSetting func(string) (string
 	}
 }
 
+func switchExecutionMode(ctx context.Context, a *app.App, save func(context.Context, string, string) error, mode string) (string, error) {
+	if a == nil || a.Machine == nil {
+		return "", errors.New("execution machine is not initialized")
+	}
+
+	executionModeMu.Lock()
+	defer executionModeMu.Unlock()
+
+	prev := a.Machine.ExecutionMode()
+	note, err := a.Machine.SetExecutionMode(mode)
+	if err != nil {
+		return "", err
+	}
+	active := a.Machine.ExecutionMode()
+	if save != nil {
+		sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err = save(sctx, settingExecutionMode, active)
+		cancel()
+		if err != nil {
+			if prev != active {
+				_, _ = a.Machine.SetExecutionMode(prev)
+			}
+			return "", fmt.Errorf("save execution mode: %w", err)
+		}
+	}
+	if a.Config != nil {
+		a.Config.ExecutionMode = active
+	}
+	return note, nil
+}
+
 func (t *terminal) ExecutionMode() string {
 	if t.app != nil && t.app.Machine != nil {
 		return t.app.Machine.ExecutionMode()
@@ -81,23 +117,9 @@ func (t *terminal) executionStatus() string {
 }
 
 func (t *terminal) SetExecutionMode(mode string) (string, error) {
-	if t.app == nil || t.app.Machine == nil {
-		return "", errors.New("execution machine is not initialized")
-	}
-	note, err := t.app.Machine.SetExecutionMode(mode)
-	if err != nil {
-		return "", err
-	}
-	active := t.app.Machine.ExecutionMode()
-	if t.app.Config != nil {
-		t.app.Config.ExecutionMode = active
-	}
+	var save func(context.Context, string, string) error
 	if t.st != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := t.st.SetSetting(ctx, settingExecutionMode, active); err != nil {
-			return note, err
-		}
+		save = t.st.SetSetting
 	}
-	return note, nil
+	return switchExecutionMode(context.Background(), t.app, save, mode)
 }

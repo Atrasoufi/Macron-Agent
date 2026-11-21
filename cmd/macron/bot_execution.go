@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Metixpro/macron-agent/pkg/telegram"
 )
@@ -27,25 +25,11 @@ func (b *Bot) sandboxed() bool {
 }
 
 func (b *Bot) setExecutionMode(ctx context.Context, mode string) (string, error) {
-	if b.app == nil || b.app.Machine == nil {
-		return "", errors.New("execution machine is not initialized")
-	}
-	note, err := b.app.Machine.SetExecutionMode(mode)
-	if err != nil {
-		return "", err
-	}
-	active := b.app.Machine.ExecutionMode()
-	if b.app.Config != nil {
-		b.app.Config.ExecutionMode = active
-	}
+	var save func(context.Context, string, string) error
 	if b.st != nil {
-		sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := b.st.SetSetting(sctx, settingExecutionMode, active); err != nil {
-			return note, err
-		}
+		save = b.st.SetSetting
 	}
-	return note, nil
+	return switchExecutionMode(ctx, b.app, save, mode)
 }
 
 func (b *Bot) executionView(l lang) (string, *telegram.InlineKeyboardMarkup) {

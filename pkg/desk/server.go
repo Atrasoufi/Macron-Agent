@@ -42,6 +42,7 @@ type Server struct {
 	mode     string
 	addr     string
 	remotes  *remotes
+	upd      updateState
 }
 
 func New(host Host) *Server {
@@ -131,6 +132,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/new", s.newAPI)
 	mux.HandleFunc("POST /api/projects/{id}/compact", s.compactAPI)
 	mux.HandleFunc("POST /api/projects/{id}/answer", s.answerAPI)
+	mux.HandleFunc("POST /api/projects/{id}/upload", s.uploadAPI)
+	mux.HandleFunc("GET /api/projects/{id}/files", s.projectFilesAPI)
+	mux.HandleFunc("GET /api/projects/{id}/changes", s.changesAPI)
+	mux.HandleFunc("GET /api/projects/{id}/diff", s.diffAPI)
+	mux.HandleFunc("POST /api/projects/{id}/revert", s.revertAPI)
+	mux.HandleFunc("GET /api/projects/{id}/threads", s.threadsAPI)
+	mux.HandleFunc("POST /api/projects/{id}/threads/{tid}/switch", s.switchThreadAPI)
+	mux.HandleFunc("DELETE /api/projects/{id}/threads/{tid}", s.deleteThreadAPI)
 	mux.HandleFunc("GET /api/projects/{id}/file", s.fileAPI)
 	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealAPI)
 	mux.HandleFunc("GET /api/models", s.modelsAPI)
@@ -150,6 +159,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/execution", s.executionAPI)
 	mux.HandleFunc("POST /api/yolo", s.yoloAPI)
 	mux.HandleFunc("GET /api/connections", s.connectionsAPI)
+	mux.HandleFunc("GET /api/connections/details", s.connectionDetailsAPI)
+	mux.HandleFunc("POST /api/connections", s.saveConnectionAPI)
+	mux.HandleFunc("GET /api/memories", s.memoriesAPI)
+	mux.HandleFunc("POST /api/memories", s.addMemoryAPI)
+	mux.HandleFunc("DELETE /api/memories/{id}", s.deleteMemoryAPI)
+	mux.HandleFunc("GET /api/skills", s.skillsAPI)
+	mux.HandleFunc("POST /api/skills/{name}/enable", s.enableSkillAPI)
+	mux.HandleFunc("DELETE /api/skills/{name}", s.deleteSkillAPI)
+	mux.HandleFunc("GET /api/update", s.updateStatusAPI)
+	mux.HandleFunc("POST /api/update/install", s.updateInstallAPI)
 	mux.HandleFunc("GET /api/fs", s.fsAPI)
 	mux.HandleFunc("GET /api/servers", s.serversAPI)
 	mux.HandleFunc("POST /api/servers", s.addServerAPI)
@@ -243,7 +262,11 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 }
 
 func readJSON(r *http.Request, v any) error {
-	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20)).Decode(v)
+	return readJSONLimit(r, v, 1<<20)
+}
+
+func readJSONLimit(r *http.Request, v any, limit int64) error {
+	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, limit)).Decode(v)
 }
 
 var deskHints = map[string]string{
@@ -510,13 +533,14 @@ func (s *Server) sendAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Text string `json:"text"`
+		Text        string `json:"text"`
+		Attachments []File `json:"attachments"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := p.send(in.Text); err != nil {
+	if err := p.sendWithAttachments(in.Text, in.Attachments); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
@@ -543,19 +567,17 @@ func (s *Server) newAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := p.session()
-	if err == nil {
-		err = sess.New(r.Context())
-	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	p.mu.Lock()
-	p.loadLocked()
-	b := p.appendLocked(Block{Kind: "divider", Text: "New conversation"})
-	p.mu.Unlock()
-	p.emit("block", map[string]any{"block": b})
-	writeJSON(w, map[string]bool{"ok": true})
+	thread := p.startNewThread(sess)
+	if err := sess.New(r.Context()); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	p.emit("thread", map[string]any{"thread": thread.ID})
+	writeJSON(w, map[string]any{"ok": true, "thread": thread, "snapshot": p.snapshot()})
 }
 
 func (s *Server) compactAPI(w http.ResponseWriter, r *http.Request) {

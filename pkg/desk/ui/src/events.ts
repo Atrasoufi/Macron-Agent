@@ -1,11 +1,11 @@
-import { apiBase } from "./api";
-import { composer, fail, loadServers, loadState, openProject, refreshState, stream, switchMachine, toast } from "./actions";
-import { projectName } from "./format";
+import { apiBase, server } from "./api";
+import { checkUpdate, composer, fail, loadChanges, loadServers, loadState, openProject, refreshState, showError, stream, switchMachine } from "./actions";
 import { getState, patchLive, setState } from "./store";
-import type { Ask, Block, LiveDraft, LiveSub, LiveTool, PlanItem, ServerEvent, Usage } from "./types";
+import type { Ask, Block, LiveDraft, LiveSub, LiveTool, PlanItem, ServerEvent, UpdateStatus, Usage } from "./types";
 
 let source: EventSource | null = null;
 let seq = 0;
+let updateChecked = false;
 
 export function connect() {
   source?.close();
@@ -16,7 +16,13 @@ export function connect() {
     seq = 0;
     setState({ online: true });
     resync();
-    if (!getState().machine) loadServers();
+    if (!getState().machine) {
+      loadServers();
+      if (!updateChecked) {
+        updateChecked = true;
+        window.setTimeout(() => void checkUpdate(false), 6000);
+      }
+    }
   });
   es.addEventListener("error", () => {
     if (source !== es) return;
@@ -43,7 +49,7 @@ async function lost(es: EventSource) {
     await loadServers();
     const srv = getState().servers.find((x) => x.id === machine);
     if (!srv || srv.state !== "ready") {
-      toast(`Lost the connection to ${srv?.name || "the server"}`, 6000);
+      showError(`Lost the connection to ${srv?.name || "the server"}`, 6000);
       await switchMachine("");
       return;
     }
@@ -63,7 +69,7 @@ async function resync() {
   }
 }
 
-const touches = new Set(["user", "state", "done", "ask", "ask_done", "block"]);
+const touches = new Set(["user", "state", "done", "ask", "ask_done", "block", "thread"]);
 
 function onEvent(ev: ServerEvent) {
   if (seq && ev.seq && ev.seq !== seq + 1) {
@@ -74,17 +80,29 @@ function onEvent(ev: ServerEvent) {
   seq = ev.seq || seq;
   if (ev.type === "projects" || ev.type === "info") return refreshState();
   if (ev.type === "servers") return void loadServers();
+  if (ev.type === "update" && ev.update) {
+    setState({ update: ev.update as UpdateStatus });
+    return;
+  }
   if (!ev.project) return;
   const s = getState();
   if (ev.project === s.current) onProjectEvent(ev);
   if (touches.has(ev.type)) refreshState();
-  if (ev.type === "ask" && ev.project !== s.current) {
-    toast(projectName(s.projects.find((p) => p.id === ev.project), s.defaultId) + " is waiting for your approval", 6000);
-  }
 }
 
 function append(...blocks: Block[]) {
   if (blocks.length) setState((s) => ({ blocks: [...s.blocks, ...blocks] }));
+}
+
+function refreshThreads(projectId: string) {
+  server
+    .threads(projectId)
+    .then((r) => {
+      if (getState().current === projectId) {
+        setState({ activeThread: r.active, threads: r.threads || [] });
+      }
+    })
+    .catch(() => undefined);
 }
 
 function onProjectEvent(ev: ServerEvent) {
@@ -92,6 +110,10 @@ function onProjectEvent(ev: ServerEvent) {
     case "user":
       if (ev.taken) patchLive(() => ({ queued: [] }));
       append(ev.block as Block);
+      if (ev.project) refreshThreads(ev.project);
+      return;
+    case "thread":
+      if (ev.project) refreshThreads(ev.project);
       return;
     case "state":
       setState((s) => ({
@@ -177,6 +199,10 @@ function onProjectEvent(ev: ServerEvent) {
       }));
       const requeue = ev.requeue as string[] | undefined;
       if (requeue && requeue.length) composer.prepend(requeue.join("\n\n"));
+      if (ev.project) {
+        loadChanges(ev.project);
+        refreshThreads(ev.project);
+      }
       return;
     }
   }

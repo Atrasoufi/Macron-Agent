@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -123,6 +124,148 @@ func (h *deskHost) Connections() []desk.Connection {
 		out = append(out, desk.Connection{ID: spec.ID, Name: spec.Name, Capability: spec.Capability, Ready: tools.ConnectionReady(spec)})
 	}
 	return out
+}
+
+func (h *deskHost) ConnectionDetails() []desk.ConnectionDetail {
+	specs := tools.ConnectionSpecs()
+	out := make([]desk.ConnectionDetail, 0, len(specs))
+	for _, spec := range specs {
+		fields := make([]desk.ConnectionField, 0, len(spec.Fields))
+		for _, key := range spec.Fields {
+			meta := tools.ConnectionFieldMeta(key)
+			fields = append(fields, desk.ConnectionField{
+				Key:     meta.Key,
+				Type:    meta.Type,
+				Purpose: meta.Purpose,
+				Default: meta.Default,
+				Secret:  meta.Secret,
+				Set:     meta.Set,
+			})
+		}
+		out = append(out, desk.ConnectionDetail{
+			ID:         spec.ID,
+			Name:       spec.Name,
+			Capability: spec.Capability,
+			Ready:      tools.ConnectionReady(spec),
+			Restart:    spec.Restart,
+			Fields:     fields,
+		})
+	}
+	return out
+}
+
+func (h *deskHost) SaveConnectionValues(values map[string]string) error {
+	allowed := map[string]bool{}
+	for _, spec := range tools.ConnectionSpecs() {
+		for _, k := range spec.Fields {
+			allowed[k] = true
+		}
+	}
+	clean := map[string]string{}
+	for k, v := range values {
+		if !allowed[k] {
+			return fmt.Errorf("unknown connection setting %q", k)
+		}
+		clean[k] = strings.TrimSpace(v)
+	}
+	if err := config.SaveToolEnv(clean); err != nil {
+		return err
+	}
+	for k, v := range clean {
+		if v == "" {
+			_ = os.Unsetenv(k)
+		} else {
+			_ = os.Setenv(k, v)
+		}
+	}
+	return nil
+}
+
+func (h *deskHost) Memories() ([]desk.MemoryEntry, error) {
+	if h.w.bot == nil || h.w.bot.brain == nil {
+		return []desk.MemoryEntry{}, nil
+	}
+	var out []desk.MemoryEntry
+	if list, err := h.w.bot.brain.Memory.List(); err == nil {
+		for _, e := range list {
+			out = append(out, desk.MemoryEntry{ID: e.ID, Scope: "memory", Text: e.Text})
+		}
+	}
+	if list, err := h.w.bot.brain.User.List(); err == nil {
+		for _, e := range list {
+			out = append(out, desk.MemoryEntry{ID: e.ID, Scope: "user", Text: e.Text})
+		}
+	}
+	return out, nil
+}
+
+func (h *deskHost) AddMemory(scope, text string) (desk.MemoryEntry, error) {
+	if h.w.bot == nil || h.w.bot.brain == nil {
+		return desk.MemoryEntry{}, errors.New("memory store is not initialized")
+	}
+	notes := h.w.bot.brain.Memory
+	if scope == "user" {
+		notes = h.w.bot.brain.User
+	} else {
+		scope = "memory"
+	}
+	id, _, err := notes.Add(text)
+	if err != nil {
+		return desk.MemoryEntry{}, err
+	}
+	return desk.MemoryEntry{ID: id, Scope: scope, Text: strings.TrimSpace(text)}, nil
+}
+
+func (h *deskHost) DeleteMemory(scope string, id int) error {
+	if h.w.bot == nil || h.w.bot.brain == nil {
+		return errors.New("memory store is not initialized")
+	}
+	notes := h.w.bot.brain.Memory
+	if scope == "user" {
+		notes = h.w.bot.brain.User
+	}
+	ok, err := notes.Delete(id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("memory entry not found")
+	}
+	return nil
+}
+
+func (h *deskHost) Skills() []desk.SkillView {
+	if h.w.app == nil || h.w.app.Skills == nil {
+		return []desk.SkillView{}
+	}
+	snap := h.w.app.Skills.Snapshot()
+	out := make([]desk.SkillView, 0, len(snap))
+	for _, sk := range snap {
+		out = append(out, desk.SkillView{
+			Name:        sk.Name,
+			Category:    sk.Category,
+			Description: sk.Description,
+			Version:     sk.Version,
+			Enabled:     sk.Enabled,
+			Uses:        sk.Uses,
+			Files:       sk.Files,
+		})
+	}
+	return out
+}
+
+func (h *deskHost) SetSkillEnabled(name string, on bool) error {
+	if h.w.app == nil || h.w.app.Skills == nil {
+		return errors.New("skills store is not initialized")
+	}
+	return h.w.app.Skills.SetEnabled(name, on)
+}
+
+func (h *deskHost) DeleteSkill(name string) error {
+	if h.w.app == nil || h.w.app.Skills == nil {
+		return errors.New("skills store is not initialized")
+	}
+	return h.w.app.Skills.Delete(name)
 }
 
 func (h *deskHost) Projects() []string {

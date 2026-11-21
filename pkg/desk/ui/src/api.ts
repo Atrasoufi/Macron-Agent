@@ -1,4 +1,25 @@
-import type { ConnectResult, Connection, Info, Listing, Mode, Plugin, ProviderChoice, ServerView, Snapshot, StateResponse, Summary, Tuning } from "./types";
+import type {
+  ChangesResponse,
+  ConnectResult,
+  Connection,
+  ConnectionDetail,
+  DiffResponse,
+  FileRef,
+  Info,
+  Listing,
+  MemoryEntry,
+  Mode,
+  Plugin,
+  ProviderChoice,
+  ServerView,
+  SkillView,
+  Snapshot,
+  StateResponse,
+  Summary,
+  ThreadSummary,
+  Tuning,
+  UpdateStatus,
+} from "./types";
 
 let base = "";
 
@@ -43,6 +64,26 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
+async function uploadForm(path: string, file: File): Promise<FileRef> {
+  const fd = new FormData();
+  fd.append("file", file, file.name || "attachment");
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "POST",
+      headers: { "X-Macron": "1" },
+      credentials: "same-origin",
+      body: fd,
+    });
+  } catch {
+    throw new ApiError("Could not upload the file");
+  }
+  const type = res.headers.get("Content-Type") || "";
+  const data = type.includes("json") ? await res.json().catch(() => ({})) : { error: (await res.text()).trim() };
+  if (!res.ok) throw new ApiError(data.error || `Upload failed (${res.status})`, data.hint || "");
+  return data as FileRef;
+}
+
 type InfoResponse = { info: Info; mode: Mode };
 type Ok = { ok: boolean };
 
@@ -57,9 +98,17 @@ export const server = {
   reveal: (id: string, name: string, folder: boolean) => call<Ok>("POST", p(id) + "/reveal", { name, folder }),
   state: () => call<StateResponse>("GET", r("/api/state")),
   project: (id: string) => call<Snapshot>("GET", p(id)),
-  send: (id: string, text: string) => call<Ok>("POST", p(id) + "/send", { text }),
+  send: (id: string, text: string, attachments?: FileRef[]) => call<Ok>("POST", p(id) + "/send", attachments?.length ? { text, attachments } : { text }),
+  upload: (id: string, file: File) => uploadForm(p(id) + "/upload", file),
+  projectFiles: (id: string, q: string) => call<{ files: string[] }>("GET", p(id) + "/files?q=" + encodeURIComponent(q)),
+  changes: (id: string) => call<ChangesResponse>("GET", p(id) + "/changes"),
+  diff: (id: string, path: string) => call<DiffResponse>("GET", p(id) + "/diff?path=" + encodeURIComponent(path)),
+  revert: (id: string, path: string) => call<Ok>("POST", p(id) + "/revert", { path }),
+  threads: (id: string) => call<{ active: string; threads: ThreadSummary[] }>("GET", p(id) + "/threads"),
+  switchThread: (id: string, tid: string) => call<Snapshot>("POST", p(id) + "/threads/" + encodeURIComponent(tid) + "/switch"),
+  deleteThread: (id: string, tid: string) => call<{ active: string; threads: ThreadSummary[]; snapshot: Snapshot }>("DELETE", p(id) + "/threads/" + encodeURIComponent(tid)),
   stop: (id: string) => call<Ok>("POST", p(id) + "/stop"),
-  newChat: (id: string) => call<Ok>("POST", p(id) + "/new"),
+  newChat: (id: string) => call<{ ok: boolean; thread?: ThreadSummary; snapshot?: Snapshot }>("POST", p(id) + "/new"),
   compact: (id: string) => call<{ text: string }>("POST", p(id) + "/compact"),
   answer: (id: string, ask: string, choice: string) => call<Ok>("POST", p(id) + "/answer", { id: ask, choice }),
   addProject: (path: string) => call<Summary>("POST", r("/api/projects"), { path }),
@@ -73,6 +122,16 @@ export const server = {
   setExecutionMode: (mode: string) => call<InfoResponse>("POST", r("/api/execution"), { mode }),
   setYolo: (on: boolean) => call<InfoResponse>("POST", r("/api/yolo"), { on }),
   connections: () => call<{ connections: Connection[] | null }>("GET", r("/api/connections")),
+  connectionDetails: () => call<{ connections: ConnectionDetail[] }>("GET", r("/api/connections/details")),
+  saveConnections: (values: Record<string, string>) => call<{ connections: ConnectionDetail[]; info: Info }>("POST", r("/api/connections"), { values }),
+  memories: () => call<{ memories: MemoryEntry[] }>("GET", r("/api/memories")),
+  addMemory: (scope: "memory" | "user", text: string) => call<MemoryEntry>("POST", r("/api/memories"), { scope, text }),
+  deleteMemory: (scope: "memory" | "user", id: number) => call<Ok>("DELETE", r("/api/memories/") + id + "?scope=" + scope),
+  skills: () => call<{ skills: SkillView[] }>("GET", r("/api/skills")),
+  enableSkill: (name: string, on: boolean) => call<{ ok: boolean; skills: SkillView[] }>("POST", r("/api/skills/") + encodeURIComponent(name) + "/enable", { on }),
+  deleteSkill: (name: string) => call<{ ok: boolean; skills: SkillView[] }>("DELETE", r("/api/skills/") + encodeURIComponent(name)),
+  checkUpdate: (force = false) => call<UpdateStatus>("GET", "/api/update" + (force ? "?force=1" : "")),
+  installUpdate: () => call<UpdateStatus>("POST", "/api/update/install", {}),
   fs: (path: string) => call<Listing>("GET", r("/api/fs?path=") + encodeURIComponent(path)),
   connectModel: (m: { name: string; url: string; key: string; model: string }) => call<InfoResponse>("POST", r("/api/providers/connect"), m),
   listModels: (url: string, key: string) => call<{ models: string[] | null }>("POST", r("/api/providers/models"), { url, key }),

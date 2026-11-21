@@ -672,3 +672,16 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - Both log commands read and follow files in Go; no `tail` or `journalctl` is needed on Windows. Update messages use the actual executable backup name; Telegram updates schedule their restart with PowerShell instead of `sh`. Native uninstall defers locked executable deletion until exit and supports `--keep-data`.
 - Closing the machine menu or slash suggestions with Escape no longer stops a running desktop job.
 - Public regressions run Windows process/startup lifecycle checks and native CLI flows on PowerShell 5.1 and 7, including Persian paths/logs and real portable uninstall.
+
+### 1.16.0: Desktop workspace suite, bilingual RTL UI, GitHub auto-updates and fail-closed execution mode
+
+- **Attachments & screenshots in the desktop composer**: attach files or images via the paperclip button, drag-and-drop anywhere onto the chat, or `Ctrl+V` screenshot paste (`POST /api/projects/{id}/upload`). Uploads are stored inside `.macron-uploads/` (automatically excluded from git) with thumbnail previews in both composer chips and sent messages.
+- **Git Changes & Diff Inspector**: tabbed right-side panel (**Plan** / **Changes**) shows the current branch, modified and untracked files with `+N / -M` counters, a colored unified diff viewer, and safe two-step file revert (`GET /api/projects/{id}/changes`, `/diff`, `POST /revert`).
+- **`@file` mention autocomplete**: typing `@` in the composer opens a fast fuzzy file picker across the project folder (`GET /api/projects/{id}/files`).
+- **Multi-thread conversations per workspace**: `/new` archives the current conversation into a named thread under the active workspace in the sidebar, with isolated per-thread LLM memory, instant switching, and deletion.
+- **Bilingual English / Persian (RTL) desktop UI**: switch between `English` and `فارسی` in Settings or the Command Palette (`Ctrl+K`); switches document direction to RTL while preserving LTR for code blocks, diffs, and paths.
+- **Skills, Memory & Connections in Settings**: toggle or remove loaded skills, view/add/delete `MEMORY.md` and `USER.md` notes, and configure service credentials (GitHub, Gmail, SMTP, Telegram, Bale, Rubika, Slack, S3, Notion, etc.) directly inside Settings.
+- **Automatic GitHub updates**: checks GitHub Releases automatically on startup and on demand in Settings, showing an update card with release notes and SHA-256 verified one-click install (`GET /api/update`, `POST /api/update/install`).
+- **Quiet UI notifications**: removed the white bottom toast bar on routine actions; errors appear in a subtle dismissible inline alert above the composer.
+- **Fail-closed execution mode**: opt-in `sandbox` / `best-effort` / `local` isolation across CLI, TUI (`/execution`), Telegram (`/execution`), and Desktop Settings, persisted across restarts with `CLI flag > MACRON_EXECUTION_MODE > SQLite > best-effort` precedence.
+

@@ -23,19 +23,25 @@ import {
   newChat,
   openDialog,
   openProject,
+  checkUpdate,
+  setLang,
   setTheme,
   stop,
   toast,
+  toggleChanges,
   toggleMode,
 } from "../actions";
 import { server } from "../api";
 import { shortPath } from "../format";
 import { useMod, useProjectName } from "../hooks";
+import { useT } from "../i18n";
+import type { Lang } from "../i18n";
 import { Icon } from "../icons";
 import type { IconName } from "../icons";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Connection, Listing, Plugin, ProviderChoice } from "../types";
+import type { Ask, Listing, Plugin, ProviderChoice } from "../types";
+import { ConnectionsSection, MemorySection, SkillsSection, UpdatesSection } from "./SettingsExtras";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
   return (
@@ -722,8 +728,11 @@ function Palette({ mode }: { mode: "root" | "models" }) {
         : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
       { id: "connect", group: "Actions", label: "Connect another provider…", icon: "plus", run: () => openDialog({ kind: "model-connect" }) },
       { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
+      { id: "changes", group: "Actions", label: "Show git changes & diff", icon: "gitBranch", run: () => toggleChanges(true) },
       { id: "mcp", group: "Actions", label: "Add an MCP server…", icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
       { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
+      { id: "update", group: "Actions", label: "Check for updates (GitHub)", icon: "download", run: () => void checkUpdate(true) },
+      { id: "lang", group: "Actions", label: getState().lang === "fa" ? "Switch language to English" : "تغییر زبان به فارسی (Persian)", icon: "globe", run: () => setLang(getState().lang === "fa" ? "en" : "fa") },
       { id: "settings", group: "Actions", label: "Settings", icon: "sliders", keys: [mod, ","], run: () => openDialog({ kind: "settings" }) },
     ];
     if (running) list.unshift({ id: "stop", group: "Actions", label: "Stop the current job", icon: "square", keys: ["Esc"], run: () => stop() });
@@ -1027,13 +1036,14 @@ function Section({ title, help, children }: { title: string; help?: string; chil
 }
 
 function Settings() {
+  const t = useT();
   const info = useStore((s) => s.info);
   const theme = useStore((s) => s.theme);
+  const lang = useStore((s) => s.lang);
   const servers = useStore((s) => s.servers);
   const tuning = useStore((s) => s.tuning);
   const mod = useMod();
   const [providers, setProviders] = useState<ProviderChoice[] | null>(null);
-  const [connections, setConnections] = useState<Connection[] | null>(null);
   const [plugins, setPlugins] = useState<Plugin[] | null>(null);
   const dialog = useStore((s) => s.dialog);
   const loadPlugins = () =>
@@ -1047,8 +1057,7 @@ function Settings() {
   const togglePlugin = async (p: Plugin) => {
     setPlugins((list) => (list || []).map((x) => (x.key === p.key ? { ...x, enabled: !p.enabled, status: p.enabled ? "off" : "connecting" } : x)));
     try {
-      const next = await server.enablePlugin(p.key, !p.enabled);
-      toast(`${next.name}: ${pluginStatus(next)}`);
+      await server.enablePlugin(p.key, !p.enabled);
     } catch (e) {
       fail(e);
     }
@@ -1057,7 +1066,6 @@ function Settings() {
   const dropPlugin = async (p: Plugin) => {
     try {
       await server.removePlugin(p.key);
-      toast("Removed " + p.name);
     } catch (e) {
       fail(e);
     }
@@ -1066,14 +1074,12 @@ function Settings() {
 
   useEffect(() => {
     server.providers().then((r) => setProviders(r.providers || [])).catch(() => setProviders([]));
-    server.connections().then((r) => setConnections(r.connections || [])).catch(() => setConnections([]));
   }, [info.provider]);
 
-  const apply = async (fn: () => Promise<{ info: typeof info }>, done?: string) => {
+  const apply = async (fn: () => Promise<{ info: typeof info }>, _done?: string) => {
     try {
       const r = await fn();
       setState({ info: r.info });
-      if (done) toast(done);
     } catch (e) {
       fail(e);
     }
@@ -1081,85 +1087,100 @@ function Settings() {
 
   const isLinux = !info.platform || info.platform === "linux";
   const executionMode = (info.executionMode || "best-effort") as "sandbox" | "best-effort" | "local";
-  const executionHelp = {
-    sandbox: info.sandboxed
-      ? "Strict bubblewrap isolation is active (fail-closed)."
-      : isLinux
-        ? "Strict bubblewrap isolation (fail-closed if unavailable)."
-        : "Strict bubblewrap isolation is only available on Linux.",
-    "best-effort": info.sandboxed
-      ? "Sandbox active; falls back to local if unavailable."
-      : isLinux
-        ? "Unsandboxed; uses bubblewrap when available."
-        : "Unsandboxed (bubblewrap sandbox is Linux-only).",
-    local: "Sandbox bypassed. Commands run directly on the host.",
-  }[executionMode];
+  const executionHelp = t(
+    {
+      sandbox: info.sandboxed
+        ? "Strict bubblewrap isolation is active (fail-closed)."
+        : isLinux
+          ? "Strict bubblewrap isolation (fail-closed if unavailable)."
+          : "Strict bubblewrap isolation is only available on Linux.",
+      "best-effort": info.sandboxed
+        ? "Sandbox active; falls back to local if unavailable."
+        : isLinux
+          ? "Unsandboxed; uses bubblewrap when available."
+          : "Unsandboxed (bubblewrap sandbox is Linux-only).",
+      local: "Sandbox bypassed. Commands run directly on the host.",
+    }[executionMode],
+  );
 
   const approvals = (info.approvals || "smart") as "smart" | "manual" | "off";
-  const approvalHelp = {
-    smart: "Safe commands run on their own. Anything risky waits for you.",
-    manual: "Every command waits for your OK.",
-    off: "Nothing waits. Only for machines you can afford to break.",
-  }[approvals];
+  const approvalHelp = t(
+    {
+      smart: "Safe commands run on their own. Anything risky waits for you.",
+      manual: "Every command waits for your OK.",
+      off: "Nothing waits. Only for machines you can afford to break.",
+    }[approvals],
+  );
 
   return (
     <>
       <div className="settings-head">
-        <h3>Settings</h3>
+        <h3>{t("Settings")}</h3>
         <button type="button" className="icon-btn" title="Close (Esc)" onClick={closeDialog}>
           <Icon name="x" />
         </button>
       </div>
       <div className="settings-body">
-        <div className="set-group">General</div>
-        <Section title="Appearance">
+        <div className="set-group">{t("General")}</div>
+        <Section title={t("Appearance")}>
           <Choice<Theme>
             value={theme}
             options={[
-              ["system", "System"],
-              ["light", "Light"],
-              ["dark", "Dark"],
+              ["system", t("System")],
+              ["light", t("Light")],
+              ["dark", t("Dark")],
             ]}
             onPick={setTheme}
           />
         </Section>
-        <div className="set-group">Safety</div>
-        <Section title="Command approvals" help={approvalHelp}>
+        <Section title={t("Language")}>
+          <Choice<Lang>
+            value={lang}
+            options={[
+              ["en", "English"],
+              ["fa", "فارسی"],
+            ]}
+            onPick={setLang}
+          />
+        </Section>
+        <UpdatesSection />
+        <div className="set-group">{t("Safety")}</div>
+        <Section title={t("Command approvals")} help={approvalHelp}>
           <Choice
             value={approvals}
             options={[
-              ["smart", "Smart"],
-              ["manual", "Always ask"],
-              ["off", "Never ask"],
+              ["smart", t("Smart")],
+              ["manual", t("Always ask")],
+              ["off", t("Never ask")],
             ]}
             onPick={(m) => apply(() => server.setApprovals(m))}
           />
         </Section>
-        <Section title="Execution mode" help={executionHelp}>
+        <Section title={t("Execution mode")} help={executionHelp}>
           <Choice
             value={executionMode}
             options={[
-              ["sandbox", "Sandbox"],
-              ["best-effort", "Best-effort"],
-              ["local", "Local"],
+              ["sandbox", t("Sandbox")],
+              ["best-effort", t("Best-effort")],
+              ["local", t("Local")],
             ]}
-            onPick={(m) => apply(() => server.setExecutionMode(m), "Execution mode: " + m)}
+            onPick={(m) => apply(() => server.setExecutionMode(m))}
           />
         </Section>
-        <Section title="YOLO for 30 minutes" help={info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while."}>
+        <Section title={t("YOLO for 30 minutes")} help={t(info.yolo ? "On. Commands run without asking until it runs out." : "Let Macron run everything without asking, for a while.")}>
           <button
             type="button"
             role="switch"
             aria-checked={info.yolo}
             className={"switch" + (info.yolo ? " on" : "")}
-            onClick={() => apply(() => server.setYolo(!getState().info.yolo), info.yolo ? "YOLO is off" : "YOLO is on for 30 minutes")}
+            onClick={() => apply(() => server.setYolo(!getState().info.yolo))}
           >
             <span />
           </button>
         </Section>
-        <div className="set-group">Model</div>
+        <div className="set-group">{t("Model")}</div>
         <div className="set-list">
-          {providers === null && <div className="empty-row">Loading…</div>}
+          {providers === null && <div className="empty-row">{t("Loading…")}</div>}
           {providers && !providers.length && <div className="empty-row">No model connected yet.</div>}
           {(providers || []).map((p) => (
             <button
@@ -1167,7 +1188,7 @@ function Settings() {
               type="button"
               className={"set-row" + (p.active ? " on" : "")}
               disabled={p.active}
-              onClick={() => apply(() => server.setProvider(p.id), "Provider: " + p.name)}
+              onClick={() => apply(() => server.setProvider(p.id))}
             >
               <span className="radio" />
               <span className="grow">
@@ -1180,13 +1201,13 @@ function Settings() {
           <button type="button" className="set-row" onClick={() => openDialog({ kind: "model-connect" })}>
             <Icon name="plus" size={14} />
             <span className="grow">
-              <span className="name">Connect a model…</span>
+              <span className="name">{t("Connect a model")}…</span>
             </span>
           </button>
         </div>
         {tuning && tuning.model && (
           <>
-            <Section title="Effort" help={effortNote(tuning)}>
+            <Section title={t("Effort")} help={effortNote(tuning)}>
               <Choice
                 value={tuning.effort || "auto"}
                 options={effortLevels.map((l) => [l || "auto", l === "ultracode" ? "Ultra" : effortName(l)] as [string, string])}
@@ -1194,7 +1215,7 @@ function Settings() {
               />
             </Section>
             <Section
-              title="Context window"
+              title={t("Context window")}
               help={tuning.window ? "Set by you. A window larger than the model really has makes requests fail." : `Worked out from the model's name: ${windowName(tuning.autoWindow)} tokens.`}
             >
               <Choice
@@ -1210,7 +1231,7 @@ function Settings() {
                 onPick={(v) => setTuning("window", Number(v))}
               />
             </Section>
-            <Section title="Temperature" help="Lower answers are exact and repeatable, higher ones are more varied.">
+            <Section title={t("Temperature")} help="Lower answers are exact and repeatable, higher ones are more varied.">
               <Choice
                 value={tuning.temperature === null ? "auto" : String(tuning.temperature)}
                 options={[
@@ -1227,9 +1248,11 @@ function Settings() {
             </Section>
           </>
         )}
-        <div className="set-group">MCP servers and plugins</div>
+        <SkillsSection />
+        <MemorySection />
+        <div className="set-group">{t("MCP servers and plugins")}</div>
         <div className="set-list">
-          {plugins === null && <div className="empty-row">Loading…</div>}
+          {plugins === null && <div className="empty-row">{t("Loading…")}</div>}
           {plugins && !plugins.length && <div className="empty-row">None yet. MCP servers give Macron more tools: GitHub, databases, design files and more.</div>}
           {(plugins || []).map((p) => (
             <div key={p.key} className="set-row static">
@@ -1244,7 +1267,7 @@ function Settings() {
                 <span />
               </button>
               {p.removable && (
-                <button type="button" className="icon-btn" title="Remove" onClick={() => dropPlugin(p)}>
+                <button type="button" className="icon-btn" title={t("Remove")} onClick={() => dropPlugin(p)}>
                   <Icon name="x" size={14} />
                 </button>
               )}
@@ -1253,11 +1276,11 @@ function Settings() {
           <button type="button" className="set-row" onClick={() => openDialog({ kind: "mcp-add" })}>
             <Icon name="plus" size={14} />
             <span className="grow">
-              <span className="name">Add an MCP server…</span>
+              <span className="name">{t("Add an MCP server…")}</span>
             </span>
           </button>
         </div>
-        <div className="set-group">Servers</div>
+        <div className="set-group">{t("Servers")}</div>
         <div className="set-list">
           {!servers.length && <div className="empty-row">No servers yet. Add one to let Macron work on a VPS or in WSL.</div>}
           {servers.map((s) => (
@@ -1272,14 +1295,14 @@ function Settings() {
               </span>
               {s.state === "ready" ? (
                 <button type="button" className="btn ghost" onClick={() => disconnectServer(s.id)}>
-                  Disconnect
+                  {t("Disconnect")}
                 </button>
               ) : (
                 <button type="button" className="btn ghost" disabled={s.state === "connecting" || s.state === "installing"} onClick={() => connectServer(s.id)}>
-                  Connect
+                  {t("Connect")}
                 </button>
               )}
-              <button type="button" className="icon-btn" title="Remove" onClick={() => removeServer(s.id)}>
+              <button type="button" className="icon-btn" title={t("Remove")} onClick={() => removeServer(s.id)}>
                 <Icon name="x" size={14} />
               </button>
             </div>
@@ -1287,35 +1310,22 @@ function Settings() {
           <button type="button" className="set-row" onClick={() => openDialog({ kind: "server-add" })}>
             <Icon name="plus" size={14} />
             <span className="grow">
-              <span className="name">Add a server…</span>
+              <span className="name">{t("Add a server…")}</span>
             </span>
           </button>
         </div>
-        <div className="set-group">Connections</div>
-        <div className="set-list">
-          {connections === null && <div className="empty-row">Loading…</div>}
-          {(connections || []).map((c) => (
-            <div key={c.id} className="set-row static">
-              <span className={"state" + (c.ready ? " ok" : "")} />
-              <span className="grow">
-                <span className="name">{c.name}</span>
-                {c.capability && <span className="meta">{c.capability}</span>}
-              </span>
-              <span className="meta">{c.ready ? "Connected" : "Not set up"}</span>
-            </div>
-          ))}
-        </div>
-        <div className="set-group">Keyboard</div>
+        <ConnectionsSection />
+        <div className="set-group">{t("Keyboard")}</div>
         <dl className="keys compact">
           {(
             [
-              ["Send", ["Enter"]],
-              ["New line", ["Shift", "Enter"]],
-              ["Stop", ["Esc"]],
-              ["Command palette", [mod, "K"]],
-              ["New conversation", [mod, "N"]],
-              ["Plan mode", [mod, "Shift", "P"]],
-              ["Open folder", [mod, "O"]],
+              [t("Send"), ["Enter"]],
+              [t("New line"), ["Shift", "Enter"]],
+              [t("Stop"), ["Esc"]],
+              [t("Command palette"), [mod, "K"]],
+              [t("New conversation"), [mod, "N"]],
+              [t("Plan mode"), [mod, "Shift", "P"]],
+              [t("Open folder"), [mod, "O"]],
             ] as [string, string[]][]
           ).map(([label, combo]) => (
             <div key={label}>

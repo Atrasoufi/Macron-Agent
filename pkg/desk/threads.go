@@ -194,12 +194,12 @@ func (p *project) startNewThread(sess Session) ThreadSummary {
 		p.blocks = nil
 		p.updated = time.Now()
 		p.live = Live{}
-		p.usageIn, p.usageOut = 0, 0
+		p.usageIn, p.usageOut, p.usageCost, p.usageKnown = 0, 0, 0, false
 		p.saveThreadsLocked()
 	} else {
 		p.blocks = nil
 		p.live = Live{}
-		p.usageIn, p.usageOut = 0, 0
+		p.usageIn, p.usageOut, p.usageCost, p.usageKnown = 0, 0, 0, false
 		for _, t := range p.threads {
 			if t.ID == p.activeThread {
 				next = t
@@ -245,7 +245,7 @@ func (p *project) switchThread(tid string) error {
 	p.blocks = blocks
 	p.updated = updated
 	p.live = Live{}
-	p.usageIn, p.usageOut = 0, 0
+	p.usageIn, p.usageOut, p.usageCost, p.usageKnown = 0, 0, 0, false
 	p.saveThreadsLocked()
 	sess := p.sess
 	p.mu.Unlock()

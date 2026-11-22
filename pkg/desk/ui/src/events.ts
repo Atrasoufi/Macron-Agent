@@ -190,9 +190,10 @@ function onProjectEvent(ev: ServerEvent) {
       return;
     case "done": {
       const blocks = (ev.blocks as Block[] | null) || [];
+      const ctx = (ev.context as { used: number; window: number } | undefined) || undefined;
       setState((s) => ({
         blocks: [...s.blocks, ...blocks],
-        live: { running: false, usage: ev.usage as Usage, context: s.live.context },
+        live: { running: false, usage: ev.usage as Usage, context: ctx ?? s.live.context },
         lastTook: (ev.took as number) || 0,
         dialog: s.dialog?.kind === "ask" ? null : s.dialog,
         unseen: document.hasFocus() ? s.unseen : true,

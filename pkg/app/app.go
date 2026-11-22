@@ -17,7 +17,15 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
-const Version = "1.16.0"
+const Version = "1.17.0"
+
+const (
+	Name          = "Macron Agent"
+	Creator       = "SpectorDev"
+	CreatorHandle = "@SpectorDev"
+	CreatorURL    = "https://t.me/SpectorDev"
+	License       = "MIT License — SpectorDev Team"
+)
 
 type App struct {
 	Config   *config.Config

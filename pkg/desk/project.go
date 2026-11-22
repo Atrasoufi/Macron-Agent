@@ -20,6 +20,7 @@ import (
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
 	"github.com/Metixpro/macron-agent/pkg/cmdgate"
+	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/tui"
 )
 
@@ -104,6 +105,13 @@ func draftArg(head string) string {
 	return clipRunes(v, 120)
 }
 
+type UsageView struct {
+	In        int     `json:"in"`
+	Out       int     `json:"out"`
+	Cost      float64 `json:"cost,omitempty"`
+	CostKnown bool    `json:"costKnown,omitempty"`
+}
+
 type Live struct {
 	Draft   *liveDraft       `json:"draft,omitempty"`
 	Running bool             `json:"running"`
@@ -116,7 +124,7 @@ type Live struct {
 	Queued  []string         `json:"queued,omitempty"`
 	Ask     *askView         `json:"ask,omitempty"`
 	Context map[string]int   `json:"context,omitempty"`
-	Usage   map[string]int   `json:"usage,omitempty"`
+	Usage   *UsageView       `json:"usage,omitempty"`
 }
 
 type Summary struct {
@@ -149,6 +157,8 @@ type project struct {
 	mode          string
 	usageIn       int
 	usageOut      int
+	usageCost     float64
+	usageKnown    bool
 	activeThread  string
 	threads       []ThreadSummary
 	threadsLoaded bool
@@ -677,6 +687,10 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 		answer = strings.TrimSpace(res.Answer)
 		p.usageIn += res.Usage.PromptTokens
 		p.usageOut += res.Usage.CompletionTokens
+		if usd, ok := llm.EstimateCost(p.srv.host.Info().Model, res.Usage); ok {
+			p.usageCost += usd
+			p.usageKnown = true
+		}
 	}
 	switch {
 	case stopped:
@@ -699,11 +713,13 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 	}
 	queued := p.queue
 	p.queue = nil
-	p.live = Live{Usage: map[string]int{"in": p.usageIn, "out": p.usageOut}}
+	lastCtx := p.live.Context
+	uv := &UsageView{In: p.usageIn, Out: p.usageOut, Cost: p.usageCost, CostKnown: p.usageKnown}
+	p.live = Live{Context: lastCtx, Usage: uv}
 	p.cancel = nil
 	p.mu.Unlock()
 	took := time.Since(started)
-	done := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "usage": map[string]int{"in": p.usageIn, "out": p.usageOut}}
+	done := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "context": lastCtx, "usage": uv}
 	if stopped && len(queued) > 0 {
 		done["requeue"] = queued
 	}

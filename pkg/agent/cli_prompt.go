@@ -14,7 +14,8 @@ func (a *Agent) cliPrompt(offers func(string) bool) string {
 	if runtime.GOOS == "windows" {
 		where = "a local agent on this Windows PC"
 	}
-	fmt.Fprintf(&b, "You are %s, %s.\n\n%s\n", a.Persona.fullName(), where, a.soulText())
+	fmt.Fprintf(&b, "You are %s, %s, developed by %s (%s) under the MIT License (SpectorDev Team).\n\n%s\n",
+		a.Persona.fullName(), where, a.Persona.Creator, a.Persona.CreatorHandle, a.soulText())
 	if a.Teachings != nil {
 		if taught := strings.TrimSpace(a.Teachings()); taught != "" {
 			b.WriteString("\nOwner rules:\n" + taught + "\n")

@@ -348,3 +348,182 @@ export function ConnectionsSection() {
     </>
   );
 }
+
+export function SoulSection() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [path, setPath] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await server.getSoul();
+      setText(r.text || "");
+      setPath(r.path || "");
+    } catch (e) {
+      fail(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    setSaved(false);
+    if (next) void load();
+  };
+
+  const save = async () => {
+    if (!text.trim()) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const r = await server.saveSoul(text);
+      setText(r.text || text);
+      setSaved(true);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const r = await server.resetSoul();
+      setText(r.text || "");
+      setSaved(true);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="set-group">{t("Agent personality (SOUL.md)")}</div>
+      <div className="set-list">
+        <div className="conn-wrap">
+          <div className="set-row static">
+            <span className="grow">
+              <span className="name">SOUL.md</span>
+              <span className="meta" dir="ltr">
+                {path || t("Personality, tone, and identity shared across Desktop, TUI, and Telegram")}
+              </span>
+            </span>
+            <button type="button" className="btn ghost sm" onClick={toggle}>
+              {open ? t("Close") : t("Edit")}
+            </button>
+          </div>
+          {open && (
+            <div className="conn-form">
+              <textarea
+                className="soul-area"
+                rows={7}
+                dir="auto"
+                disabled={loading}
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setSaved(false);
+                }}
+              />
+              <div className="soul-bar">
+                <button type="button" className="btn ghost sm" disabled={saving || loading} onClick={reset}>
+                  {t("Reset default")}
+                </button>
+                <div className="left">
+                  {saved && <span className="meta ok-text">{t("Saved")}</span>}
+                  <button type="button" className="btn primary sm" disabled={saving || loading || !text.trim()} onClick={save}>
+                    {saving ? t("Saving…") : t("Save")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+export function StatusDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const current = useStore((s) => s.current);
+  const info = useStore((s) => s.info);
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!current) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    server
+      .projectStatus(current)
+      .then((r) => setStatus(r.status || ""))
+      .catch(() => setStatus(""))
+      .finally(() => setLoading(false));
+  }, [current]);
+
+  return (
+    <div className="status-dlg">
+      <div className="settings-head">
+        <h3>{t("System & session status")}</h3>
+        <button type="button" className="icon-btn" title="Close (Esc)" onClick={onClose}>
+          <Icon name="x" />
+        </button>
+      </div>
+      <div className="status-body">
+        {loading ? (
+          <div className="empty-row">{t("Loading…")}</div>
+        ) : (
+          <pre className="status-pre" dir="ltr">
+            {status ||
+              `Macron Agent ${info.version} — by ${info.creator || "SpectorDev"} (${info.creatorUrl || "https://t.me/SpectorDev"})\n  model       ${info.model || "none"}\n  provider    ${info.provider || "none"}\n  execution   ${info.executionMode || "best-effort"}\n  approvals   ${info.approvals || "smart"}`}
+          </pre>
+        )}
+        <AboutCard />
+      </div>
+    </div>
+  );
+}
+
+export function AboutCard() {
+  const t = useT();
+  const info = useStore((s) => s.info);
+  const creator = info.creator || "SpectorDev";
+  const url = info.creatorUrl || "https://t.me/SpectorDev";
+  return (
+    <div className="about-card">
+      <div className="about-top">
+        <div>
+          <div className="about-title">
+            Macron Agent {info.version}
+            <span className="about-badge">{creator}</span>
+          </div>
+          <div className="about-meta">
+            {t("Developed by SpectorDev Team")} · {t("MIT License")}
+          </div>
+          <div className="about-meta" dir="ltr">
+            {info.platform}
+            {info.host ? " · " + info.host : ""}
+          </div>
+        </div>
+        <a className="btn ghost sm about-link" href={url} target="_blank" rel="noreferrer" dir="ltr">
+          @SpectorDev
+        </a>
+      </div>
+    </div>
+  );
+}
+

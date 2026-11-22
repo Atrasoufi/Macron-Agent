@@ -58,6 +58,8 @@ export interface Ask {
 export interface Usage {
   in: number;
   out: number;
+  cost?: number;
+  costKnown?: boolean;
 }
 
 export interface LiveDraft {
@@ -94,6 +96,9 @@ export interface Summary {
 
 export interface Info {
   version: string;
+  creator?: string;
+  creatorUrl?: string;
+  license?: string;
   platform: string;
   host: string;
   model: string;
@@ -103,6 +108,9 @@ export interface Info {
   executionMode?: string;
   sandboxed?: boolean;
   yolo: boolean;
+  failover?: boolean;
+  routingActive?: boolean;
+  moaActive?: string;
   contextWindow: number;
   connections: number;
   services: number;
@@ -142,6 +150,55 @@ export interface ProviderChoice {
   model: string;
   active: boolean;
   enabled: boolean;
+}
+
+export interface ProviderDetail extends ProviderChoice {
+  baseUrl?: string;
+  apiKeySet?: boolean;
+  apiKeyMasked?: string;
+  api?: string;
+  resolvedApi?: string;
+  priority?: number;
+  vision?: boolean;
+  noStream?: boolean;
+  contextWindow?: number;
+  autoWindow?: number;
+  temperature?: number | null;
+  tempLimit?: number;
+  effort?: string;
+  requests?: number;
+  failures?: number;
+  avgLatencyMs?: number;
+  lastOkAt?: string;
+  lastError?: string;
+  lastErrorAt?: string;
+  cooling?: boolean;
+}
+
+export interface ProviderUpsert {
+  name?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  clearKey?: boolean;
+  model?: string;
+  api?: string;
+  priority?: number;
+  enabled?: boolean;
+  vision?: boolean;
+  noStream?: boolean;
+  contextWindow?: number;
+  temperature?: number | null;
+  clearTemp?: boolean;
+  effort?: string;
+  activate?: boolean;
+  skipTest?: boolean;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  reply?: string;
+  latencyMs: number;
+  error?: string;
 }
 
 export interface Connection {
@@ -278,4 +335,72 @@ export interface ServerEvent {
   project?: string;
   seq?: number;
   [key: string]: unknown;
+}
+
+export interface RoutingConfig {
+  enabled: boolean;
+  active: boolean;
+  lightProviderId: number;
+  lightProviderName: string;
+  strongProviderId: number;
+  strongProviderName: string;
+  sensitivity: string;
+  escalate: boolean;
+  kinds: string[];
+  allKinds: string[];
+}
+
+export interface RoutingUpdate {
+  enabled?: boolean;
+  strongProviderId?: number;
+  sensitivity?: string;
+  escalate?: boolean;
+  kinds?: string[];
+  kindsSet?: boolean;
+}
+
+export interface RoutingTestResult {
+  strong: boolean;
+  kind: string;
+  hard: boolean;
+  targetProvider: string;
+  signals: string[];
+}
+
+export interface MoaSlotView {
+  provider: string;
+  effort?: string;
+}
+
+export interface MoaPresetView {
+  name: string;
+  aggregator: MoaSlotView;
+  references: MoaSlotView[];
+  fanout: string;
+  privacyFilter: string;
+  enabled: boolean;
+  problems?: string[];
+}
+
+export interface MoaState {
+  presets: MoaPresetView[];
+  active: string;
+  defaultPreset: string;
+  privacyFilter: string;
+}
+
+export interface MoaConfigUpdate {
+  active?: string;
+  defaultPreset?: string;
+  privacyFilter?: string;
+}
+
+export interface SearchHit {
+  projectId: string;
+  projectName: string;
+  threadId: string;
+  threadTitle: string;
+  role: string;
+  snippet: string;
+  at: number;
 }

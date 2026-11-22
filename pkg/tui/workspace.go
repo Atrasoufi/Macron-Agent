@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
 type commandMsg struct{ text string }
@@ -138,10 +139,12 @@ func (m model) homeView() string {
 	if available >= 9 && len(m.sugg) == 0 {
 		title := lipgloss.PlaceHorizontal(w, lipgloss.Center, logo(w))
 		tagline := "Your workspace. Your tools. Your agent."
+		credit := "Built by SpectorDev · t.me/SpectorDev · MIT License"
 		if w < 40 {
 			tagline = "Your agent. Ready to work."
+			credit = "SpectorDev · t.me/SpectorDev"
 		}
-		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n\n"
+		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(credit)) + "\n\n"
 	}
 	top := max(0, (m.height-lipgloss.Height(header+tail)-3)/3)
 	body := strings.Repeat("\n", top) + header + tail
@@ -319,7 +322,11 @@ func (m model) statusBar(w int) string {
 		right = append(right, fmt.Sprintf("context %s/%s", short(m.ctxUsed), short(m.ctxWindow)))
 	}
 	if m.tokIn+m.tokOut > 0 {
-		right = append(right, fmt.Sprintf("↑%s ↓%s", short(m.tokIn), short(m.tokOut)))
+		tokStr := fmt.Sprintf("↑%s ↓%s", short(m.tokIn), short(m.tokOut))
+		if usd, ok := llm.EstimateCost(m.info.Model, llm.Usage{PromptTokens: m.tokIn, CompletionTokens: m.tokOut}); ok {
+			tokStr += " ~" + llm.FormatCost(usd)
+		}
+		right = append(right, tokStr)
 	}
 	if m.toolCount > 0 && w >= 80 {
 		right = append(right, plural(m.toolCount, "tool call"))

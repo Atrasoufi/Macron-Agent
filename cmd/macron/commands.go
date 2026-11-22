@@ -27,9 +27,11 @@ type commandSpec struct {
 
 var commandSpecs = []commandSpec{
 	{"start", "شروع و معرفی", "Start and introduction", commandUser},
-	{"help", "راهنما", "Help", commandUser},
+	{"help", "راهنما و فهرست فرمان‌ها", "Help and command list", commandUser},
+	{"status", "وضعیت مدل، اجرا و حافظه", "Model, execution and memory status", commandUser},
 	{"queue", "کار مستقل بعدی", "Queue a separate task", commandUser},
 	{"new", "گفتگوی تازه", "New conversation", commandUser},
+	{"compact", "خلاصه‌سازی حافظه گفتگو", "Compact conversation memory", commandUser},
 	{"memory", "حافظه و فایل‌ها", "Memory and files", commandUser},
 	{"mode", "انتخاب حالت پاسخ", "Choose response mode", commandUser},
 	{"files", "مدیریت فایل‌ها", "Manage files", commandUser},
@@ -40,6 +42,8 @@ var commandSpecs = []commandSpec{
 	{"board", "برد کارها", "Task board", commandOwner},
 	{"dashboard", "داشبورد وب", "Web dashboard", commandOwner},
 	{"settings", "پنل مدیریت", "Administration panel", commandAdmin},
+	{"execution", "حالت اجرای دستورات و سندباکس", "Execution mode and sandbox", commandOwner},
+	{"sandbox", "مدیریت سندباکس اجرا", "Sandbox isolation settings", commandOwner},
 	{"update", "بروزرسانی از گیت‌هاب", "Update from GitHub", commandOwner},
 	{"learn", "مدیریت یادگیری", "Manage learning", commandAdmin},
 	{"teach", "یاد دادن یک درس", "Teach a lesson", commandAdmin},
@@ -49,6 +53,7 @@ var commandSpecs = []commandSpec{
 	{"language", "زبان ربات", "Bot language", commandUser},
 	{"id", "شناسه کاربر و گفتگو", "User and chat IDs", commandUser},
 	{"me", "وضعیت حساب و مصرف", "Account and usage", commandUser},
+	{"about", "درباره مکرون و تیم SpectorDev", "About Macron and SpectorDev", commandUser},
 	{"cancel", "توقف کار فعلی", "Stop the current task", commandUser},
 }
 

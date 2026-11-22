@@ -1,8 +1,28 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
-import { compact, composer, draftFor, effortAbout, effortLevels, effortName, effortNote, fail, newChat, openDialog, saveDraft, send, setMode, setTuning, stop, toggleChanges } from "../actions";
+import {
+  compact,
+  composer,
+  draftFor,
+  effortAbout,
+  effortLevels,
+  effortName,
+  effortNote,
+  exportConversation,
+  fail,
+  initProject,
+  newChat,
+  openDialog,
+  runShell,
+  saveDraft,
+  send,
+  setMode,
+  setTuning,
+  stop,
+  toggleChanges,
+} from "../actions";
 import { fileURL, server } from "../api";
-import { bytes, tokens, took } from "../format";
+import { bytes, formatCost, tokens, took } from "../format";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
@@ -12,8 +32,15 @@ type Command = { name: string; hint: string; run: () => void };
 
 const COMMANDS: Command[] = [
   { name: "/new", hint: "Start a new conversation", run: () => newChat() },
+  { name: "/search", hint: "Search all conversations across workspaces", run: () => openDialog({ kind: "search" }) },
   { name: "/compact", hint: "Summarise the conversation to free room", run: () => compact() },
+  { name: "/status", hint: "Show model, sandbox, context and SpectorDev info", run: () => openDialog({ kind: "status" }) },
+  { name: "/export", hint: "Download this conversation as Markdown", run: () => exportConversation() },
+  { name: "/init", hint: "Write or update MACRON.md for this project", run: () => void initProject() },
   { name: "/model", hint: "Pick the model", run: () => openDialog({ kind: "palette", mode: "models" }) },
+  { name: "/provider", hint: "Add or customize models & providers", run: () => openDialog({ kind: "provider-edit" }) },
+  { name: "/routing", hint: "Configure smart light/strong model routing", run: () => openDialog({ kind: "settings" }) },
+  { name: "/moa", hint: "Configure multi-model voting (or type /moa <prompt>)", run: () => openDialog({ kind: "settings" }) },
   { name: "/plan", hint: "Plan first and change nothing", run: () => setMode("plan") },
   { name: "/build", hint: "Let Macron make changes", run: () => setMode("build") },
   { name: "/changes", hint: "View git changes and diff", run: () => toggleChanges(true) },
@@ -50,17 +77,49 @@ function Meter() {
   const ctx = useStore((s) => s.live.context);
   const usage = useStore((s) => s.live.usage);
   const last = useStore((s) => s.lastTook);
-  if (!ctx || !ctx.window) return null;
-  const pct = Math.min(1, ctx.used / ctx.window);
-  const parts = [`Context used: ${Math.round(pct * 100)}% of ${tokens(ctx.window)} tokens`];
-  if (usage && (usage.in || usage.out)) parts.push(`${tokens(usage.in)} in, ${tokens(usage.out)} out`);
+  const routingActive = useStore((s) => s.info.routingActive);
+  const moaActive = useStore((s) => s.info.moaActive);
+  const hasCtx = Boolean(ctx && ctx.window);
+  const hasUsage = Boolean(usage && (usage.in || usage.out));
+  if (!hasCtx && !hasUsage && !routingActive && !moaActive) return null;
+  const pct = hasCtx && ctx ? Math.min(1, ctx.used / ctx.window) : 0;
+  const parts: string[] = [];
+  if (hasCtx && ctx) parts.push(`Context used: ${Math.round(pct * 100)}% of ${tokens(ctx.window)} tokens`);
+  if (hasUsage && usage) {
+    parts.push(`${tokens(usage.in)} in, ${tokens(usage.out)} out`);
+    if (usage.costKnown && typeof usage.cost === "number") parts.push(`Est. cost: ~${formatCost(usage.cost)}`);
+  }
   if (last) parts.push(`last reply took ${took(last)}`);
   return (
-    <span className={"meter" + (pct > 0.8 ? " high" : "")} title={parts.join(" · ")}>
-      <span className="meter-bar">
-        <span style={{ width: `${Math.round(pct * 100)}%` }} />
-      </span>
-      {Math.round(pct * 100)}%
+    <span className="meter-group" dir="ltr">
+      {moaActive && (
+        <button type="button" className="ai-badge moa" title={`MoA active: ${moaActive}`} onClick={() => openDialog({ kind: "settings" })}>
+          MoA · {moaActive}
+        </button>
+      )}
+      {!moaActive && routingActive && (
+        <button type="button" className="ai-badge route" title="Smart light/strong model routing active" onClick={() => openDialog({ kind: "settings" })}>
+          Auto-Route
+        </button>
+      )}
+      {(hasCtx || hasUsage) && (
+        <span className={"meter" + (pct > 0.8 ? " high" : "")} title={parts.join(" · ")}>
+          {hasCtx && (
+            <>
+              <span className="meter-bar">
+                <span style={{ width: `${Math.round(pct * 100)}%` }} />
+              </span>
+              <span>{Math.round(pct * 100)}%</span>
+            </>
+          )}
+          {hasUsage && usage && (
+            <span className="meter-tok">
+              ↑{tokens(usage.in)} ↓{tokens(usage.out)}
+              {usage.costKnown && typeof usage.cost === "number" && <span className="meter-cost">~{formatCost(usage.cost)}</span>}
+            </span>
+          )}
+        </span>
+      )}
     </span>
   );
 }
@@ -315,12 +374,29 @@ export function Composer() {
     c.run();
   };
 
+  const historyRef = useRef<string[]>([]);
+  const histIdxRef = useRef<number>(-1);
+  const histDraftRef = useRef<string>("");
+
   const submit = async () => {
     const t = text.trim();
     if (!t && attachments.length === 0) return;
     if (attachments.length === 0) {
       const cmd = COMMANDS.find((c) => c.name === t.toLowerCase());
       if (cmd) return run(cmd);
+      if (t.startsWith("!") && t.slice(1).trim()) {
+        const sh = t.slice(1).trim();
+        historyRef.current = [...historyRef.current.slice(-49), t];
+        histIdxRef.current = -1;
+        change("");
+        setFly((n) => n + 1);
+        if (!(await runShell(sh))) change(t);
+        return;
+      }
+    }
+    if (t) {
+      historyRef.current = [...historyRef.current.slice(-49), t];
+      histIdxRef.current = -1;
     }
     const pending = [...attachments];
     change("");
@@ -387,6 +463,34 @@ export function Composer() {
         run(matches[Math.min(sel, matches.length - 1)]);
         return;
       }
+    }
+    if (e.key === "ArrowUp" && !text.includes("\n") && historyRef.current.length > 0) {
+      const el = ref.current;
+      if (!el || (el.selectionStart === 0 && el.selectionEnd === 0) || histIdxRef.current >= 0) {
+        e.preventDefault();
+        if (histIdxRef.current < 0) {
+          histDraftRef.current = text;
+          histIdxRef.current = historyRef.current.length - 1;
+        } else if (histIdxRef.current > 0) {
+          histIdxRef.current--;
+        }
+        const v = historyRef.current[histIdxRef.current] || "";
+        change(v, v.length);
+        return;
+      }
+    }
+    if (e.key === "ArrowDown" && histIdxRef.current >= 0 && !text.includes("\n")) {
+      e.preventDefault();
+      if (histIdxRef.current < historyRef.current.length - 1) {
+        histIdxRef.current++;
+        const v = historyRef.current[histIdxRef.current] || "";
+        change(v, v.length);
+      } else {
+        histIdxRef.current = -1;
+        const v = histDraftRef.current;
+        change(v, v.length);
+      }
+      return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

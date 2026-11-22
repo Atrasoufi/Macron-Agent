@@ -27,8 +27,10 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/memory"
+	"github.com/Metixpro/macron-agent/pkg/moa"
 	"github.com/Metixpro/macron-agent/pkg/plugins"
 	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/router"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/tools"
@@ -391,12 +393,89 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		filter = planToolAllowed
 		about += "\nPlan mode: inspect with read-only tools and explain the plan. Do not execute shell commands, change files, configure services, or send messages."
 	}
-	res, err := t.app.Agent.Do(ctx, agent.Request{
+
+	runCtx := ctx
+	turnText := text
+	forceMoa := false
+	if strings.HasPrefix(strings.TrimSpace(turnText), "/moa ") {
+		turnText = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(turnText), "/moa "))
+		forceMoa = true
+	}
+
+	// Smart Model Routing (shared with Telegram Bot settings)
+	if !forceMoa && t.bot != nil {
+		if rt := t.bot.chooseModel(uid, tierOwner, router.Input{Text: turnText}, false, nil); rt != nil {
+			runCtx = rt.prefer(runCtx)
+			window = rt.window(t.bot, t.bot.tier(tierOwner), window)
+			if rt.strong && l != nil && l.OnThought != nil {
+				l.OnThought(fmt.Sprintf("Smart Routing → strong model (%s)", rt.verdict.Kind))
+			}
+		}
+	}
+
+	// Multi-Model Voting (MoA): one-shot /moa or always-on preset
+	if t.bot != nil {
+		var preset *moa.Preset
+		if forceMoa {
+			defName, _ := t.st.Setting(settingMoaDefault)
+			if p, ok := moa.Find(t.bot.moaPresets(), defName); ok && len(t.bot.moaProblems(p)) == 0 {
+				if p.PrivacyFilter == "" {
+					p.PrivacyFilter, _ = t.st.Setting(settingMoaPrivacy)
+				}
+				preset = &p
+			}
+		} else if actName, _ := t.st.Setting(settingMoaActive); actName != "" {
+			if p, ok := moa.Find(t.bot.moaPresets(), actName); ok && len(t.bot.moaProblems(p)) == 0 {
+				if p.PrivacyFilter == "" {
+					p.PrivacyFilter, _ = t.st.Setting(settingMoaPrivacy)
+				}
+				preset = &p
+			}
+		}
+		if preset != nil {
+			mcClient := &moa.Client{
+				Preset: *preset,
+				Strict: t.bot.moaStrict(uid),
+				OnAdvice: func(advice []moa.Advice) {
+					if l == nil || l.OnThought == nil {
+						return
+					}
+					var names []string
+					for _, a := range advice {
+						if a.Err == nil {
+							names = append(names, a.Slot.Provider)
+						}
+					}
+					l.OnThought(fmt.Sprintf("MoA (%s): gathered advice from %s → aggregating with %s", preset.Name, strings.Join(names, ", "), preset.Aggregator.Provider))
+				},
+				Dest: func(s moa.Slot) string {
+					if pr, ok := t.bot.moaProvider(s.Provider); ok {
+						return pr.BaseURL + "|" + pr.Model
+					}
+					return s.Provider
+				},
+				Call: func(cctx context.Context, s moa.Slot, req llm.Request) (*llm.Response, error) {
+					pr, ok := t.bot.moaProvider(s.Provider)
+					if !ok {
+						return nil, fmt.Errorf("no provider %q", s.Provider)
+					}
+					cctx = providers.Only(cctx, pr.ID)
+					if s.Effort != "" {
+						cctx = llm.WithEffort(cctx, s.Effort)
+					}
+					return t.prov.Complete(cctx, req)
+				},
+			}
+			runCtx = agent.WithClient(runCtx, mcClient)
+		}
+	}
+
+	res, err := t.app.Agent.Do(runCtx, agent.Request{
 		SessionID:        t.session,
-		Input:            llm.Message{Role: "user", Content: text},
+		Input:            llm.Message{Role: "user", Content: turnText},
 		History:          mc.History,
 		Memory:           mc.Summary,
-		Chat:             agent.IsSmallTalk(text),
+		Chat:             agent.IsSmallTalk(turnText),
 		HistoryTokens:    historyBudget(t.st, window),
 		ContextWindow:    window,
 		ContextCarry:     carry,
@@ -581,8 +660,8 @@ func (t *terminal) Yolo(on bool) bool {
 
 func (t *terminal) Status(ctx context.Context) string {
 	var b strings.Builder
-	b.WriteString("Macron Agent " + app.Version)
-	row := func(k, v string) { fmt.Fprintf(&b, "\n  %-10s %s", k, v) }
+	fmt.Fprintf(&b, "%s %s — by %s (%s) · MIT License", app.Name, app.Version, app.Creator, app.CreatorURL)
+	row := func(k, v string) { fmt.Fprintf(&b, "\n  %-11s %s", k, v) }
 	if p, ok := t.prov.Active(); ok {
 		row("model", p.Model+" · provider "+p.Name)
 		row("API", providers.API(p)+" · "+p.BaseURL)
@@ -599,8 +678,13 @@ func (t *terminal) Status(ctx context.Context) string {
 		}
 		row("temperature", temperature)
 	}
+	failover := "on"
+	if t.st != nil && !t.st.SettingBool(store.SettingFailover, true) {
+		failover = "off"
+	}
+	row("failover", failover)
 	row("window", shortCount(t.window())+" tokens")
-	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
+	if mc, err := t.mem.Load(ctx, t.currentUID()); err == nil {
 		conv := fmt.Sprintf("%d messages, %s tokens", mc.Messages, shortCount(mc.Tokens))
 		if mc.Compressions > 0 {
 			conv += fmt.Sprintf(" · summarized %d times", mc.Compressions)
@@ -778,4 +862,91 @@ func (t *terminal) SetProvider(ctx context.Context, id int64) error {
 		return err
 	}
 	return t.prov.Reload(ctx)
+}
+
+func (t *terminal) ConfigureProvider(ctx context.Context, field, value string) (string, error) {
+	if field == "failover" {
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		if err := t.st.SetSetting(ctx, store.SettingFailover, fmt.Sprint(on)); err != nil {
+			return "", err
+		}
+		if on {
+			return "Auto-failover: on", nil
+		}
+		return "Auto-failover: off", nil
+	}
+	id := t.prov.ActiveID()
+	if id == 0 {
+		return "", errors.New("no provider is active")
+	}
+	p, err := t.st.Provider(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	var summary string
+	switch field {
+	case "api":
+		switch value {
+		case "auto", "default":
+			p.API = ""
+			summary = fmt.Sprintf("Provider %s API: auto (%s)", p.Name, providers.API(*p))
+		case llm.APIOpenAI, llm.APIResponses, llm.APIAnthropic:
+			p.API = value
+			summary = fmt.Sprintf("Provider %s API: %s", p.Name, value)
+		default:
+			return "", errors.New("API must be auto, openai, responses, or anthropic")
+		}
+	case "vision":
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		p.Vision = on
+		summary = fmt.Sprintf("Provider %s vision: %v", p.Name, on)
+	case "stream":
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		p.NoStream = !on
+		summary = fmt.Sprintf("Provider %s streaming: %v", p.Name, on)
+	default:
+		return "", fmt.Errorf("unknown provider setting %q", field)
+	}
+	normalized, err := providers.Normalize(*p)
+	if err != nil {
+		return "", err
+	}
+	if err := t.st.UpdateProvider(ctx, normalized); err != nil {
+		return "", err
+	}
+	if err := t.prov.Reload(ctx); err != nil {
+		return "", err
+	}
+	return summary, nil
+}
+
+func (t *terminal) TestActiveProvider(ctx context.Context) (string, error) {
+	p, ok := t.prov.Active()
+	if !ok {
+		return "", errors.New("no provider is active")
+	}
+	res, err := t.prov.Test(ctx, p)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Provider %s (%s) OK in %s: %q", p.Name, p.Model, res.Latency.Round(time.Millisecond), shortText(res.Reply, 60)), nil
+}
+
+func parseBoolToggle(v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "true", "yes", "1":
+		return true, nil
+	case "off", "false", "no", "0":
+		return false, nil
+	}
+	return false, fmt.Errorf("expected on or off, got %q", v)
 }

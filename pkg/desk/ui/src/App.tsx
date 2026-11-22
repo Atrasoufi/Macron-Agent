@@ -40,6 +40,12 @@ function useShortcuts() {
         else openDialog({ kind: "palette", mode: "root" });
         return;
       }
+      if (mod && e.shiftKey && k === "f") {
+        e.preventDefault();
+        if (s.dialog?.kind === "search") closeDialog();
+        else openDialog({ kind: "search" });
+        return;
+      }
       if (s.dialog) return;
       if (mod && e.shiftKey && k === "p") {
         e.preventDefault();

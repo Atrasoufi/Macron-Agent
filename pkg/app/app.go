@@ -17,8 +17,9 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/tools"
 )
 
+const Version = "1.17.0"
+
 const (
-	Version       = "1.17.0"
 	Name          = "Macron Agent"
 	Creator       = "SpectorDev"
 	CreatorHandle = "@SpectorDev"

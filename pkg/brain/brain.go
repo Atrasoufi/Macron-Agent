@@ -142,4 +142,3 @@ func isLegacyDefaultSoul(raw string) bool {
 	}
 	return strings.Contains(raw, "@Cianyd") || strings.Contains(raw, "حاج متی")
 }
-

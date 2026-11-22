@@ -138,10 +138,12 @@ func (m model) homeView() string {
 	if available >= 9 && len(m.sugg) == 0 {
 		title := lipgloss.PlaceHorizontal(w, lipgloss.Center, logo(w))
 		tagline := "Your workspace. Your tools. Your agent."
+		credit := "Built by SpectorDev · t.me/SpectorDev · MIT License"
 		if w < 40 {
 			tagline = "Your agent. Ready to work."
+			credit = "SpectorDev · t.me/SpectorDev"
 		}
-		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n\n"
+		header = title + "\n\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(tagline)) + "\n" + lipgloss.PlaceHorizontal(w, lipgloss.Center, stDim.Render(credit)) + "\n\n"
 	}
 	top := max(0, (m.height-lipgloss.Height(header+tail)-3)/3)
 	body := strings.Repeat("\n", top) + header + tail

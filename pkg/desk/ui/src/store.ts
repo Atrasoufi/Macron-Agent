@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { local } from "./format";
 import type { Lang } from "./i18n";
-import type { Ask, Block, ChangesResponse, Info, Live, Mode, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
+import type { Ask, Block, ChangesResponse, Info, Live, Mode, ProviderDetail, ServerView, Summary, ThreadSummary, Tuning, UpdateStatus } from "./types";
 
 export type Theme = "system" | "dark" | "light";
 export type RightTab = "plan" | "changes";
@@ -11,8 +11,10 @@ export type Dialog =
   | { kind: "palette"; mode: "root" | "models" }
   | { kind: "folder" }
   | { kind: "settings" }
+  | { kind: "status" }
   | { kind: "server-add" }
   | { kind: "model-connect" }
+  | { kind: "provider-edit"; provider?: ProviderDetail }
   | { kind: "mcp-add" }
   | { kind: "server-auth"; id: string; need: "trust" | "password" | "passphrase"; fingerprint?: string; message?: string; install?: boolean }
   | { kind: "server-install"; id: string; update: boolean; secrets?: { password?: string; passphrase?: string; trust?: string } }

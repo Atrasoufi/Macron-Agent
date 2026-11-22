@@ -105,6 +105,9 @@ function Hello({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
           I'll do it later
         </button>
       </div>
+      <div className="welcome-credit" dir="ltr">
+        Developed by <a href="https://t.me/SpectorDev" target="_blank" rel="noreferrer">SpectorDev Team</a> · MIT License
+      </div>
     </div>
   );
 }

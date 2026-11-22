@@ -23,7 +23,7 @@ var commands = []command{
 	{"/new", "", "start a new conversation in this folder"},
 	{"/clear", "", "clear the screen and start a new conversation"},
 	{"/compact", "", "summarize the conversation to free context"},
-	{"/provider", "", "switch the active provider"},
+	{"/provider", "[api|vision|stream|failover|test]", "switch or customize the active provider"},
 	{"/model", "[name]", "show or switch the model"},
 	{"/effort", "[auto|low|medium|high|ultracode]", "how hard the model thinks before answering"},
 	{"/context", "[auto|128k|1m]", "the model's context window"},
@@ -33,6 +33,7 @@ var commands = []command{
 	{"/approvals", "[smart|manual|off]", "how risky commands are approved"},
 	{"/yolo", "", "run commands without asking for 30 minutes (again: off)"},
 	{"/status", "", "model, context, tokens, folder, Telegram"},
+	{"/about", "", "SpectorDev team, channel, version and MIT license"},
 	{"/copy", "", "copy Macron's last answer to the clipboard"},
 	{"/export", "", "save this conversation as a Markdown file here"},
 	{"/theme", "[dark|light|auto]", "colors for a dark or a light terminal"},
@@ -191,7 +192,7 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 			return noticeMsg{text: stOK.Render(bullet) + " " + s}
 		})
 	case "/provider":
-		return m.providerPicker()
+		return m.providerCommand(arg)
 	case "/model":
 		if arg != "" {
 			return work("Switching", func() tea.Msg {
@@ -254,6 +255,12 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 		}
 	case "/status":
 		m.print(e.Status(context.Background()) + m.usage())
+	case "/about":
+		m.print(fmt.Sprintf("%s %s\n  %-10s %s\n  %-10s %s\n  %-10s %s",
+			stBold.Render("Macron Agent"), m.info.Version,
+			"team", "SpectorDev Team",
+			"channel", "https://t.me/SpectorDev",
+			"license", "MIT License (SpectorDev Team)"))
 	case "/copy":
 		if m.lastAnswer == "" {
 			return m, m.say("Nothing to copy yet")

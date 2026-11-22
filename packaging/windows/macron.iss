@@ -7,11 +7,14 @@ AppId={{7D4C9B2E-5A61-4F0B-9E3D-6C1A2B8F4E57}
 AppName=Macron
 AppVersion={#Version}
 AppVerName=Macron {#Version}
-AppPublisher=Metixpro
-AppPublisherURL=https://github.com/Metixpro/Macron-Agent
-AppSupportURL=https://github.com/Metixpro/Macron-Agent/issues
+AppPublisher=SpectorDev
+AppPublisherURL=https://t.me/SpectorDev
+AppSupportURL=https://t.me/SpectorDev
 AppUpdatesURL=https://github.com/Metixpro/Macron-Agent/releases
 VersionInfoVersion={#Version}
+VersionInfoCompany=SpectorDev Team
+VersionInfoCopyright=Copyright (c) 2026 SpectorDev Team (https://t.me/SpectorDev)
+VersionInfoDescription=Macron Agent by SpectorDev
 DefaultDirName={localappdata}\Programs\Macron
 DisableProgramGroupPage=yes
 DisableDirPage=auto
@@ -36,7 +39,7 @@ ChangesEnvironment=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-WelcomeLabel2=This installs Macron {#Version}, your AI agent for this PC: the desktop app and the terminal app.%n%nIt picks the right build for this PC by itself (64-bit, 32-bit or ARM) and needs no administrator rights.
+WelcomeLabel2=This installs Macron {#Version} by SpectorDev (https://t.me/SpectorDev), your AI agent for this PC: the desktop app and the terminal app.%n%nIt picks the right build for this PC by itself (64-bit, 32-bit or ARM) and needs no administrator rights. Licensed under MIT (SpectorDev Team).
 
 [Tasks]
 Name: "desktopicon"; Description: "Put Macron on the desktop"; GroupDescription: "Shortcuts:"

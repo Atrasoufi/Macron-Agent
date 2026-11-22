@@ -276,6 +276,64 @@ export async function compact() {
   }
 }
 
+export async function runShell(command: string) {
+  const s = getState();
+  const cmd = command.trim();
+  if (!cmd || !s.current) return false;
+  if (s.live.running) {
+    showError("Wait for the current job to finish");
+    return false;
+  }
+  try {
+    await server.runShell(s.current, cmd);
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
+
+const INIT_PROMPT =
+  "Study this project (its layout, how it is built, tested and run, its conventions) and write a concise MACRON.md at its root for future sessions: what the project is, the exact build, test and run commands, the code style, and what to be careful about. If MACRON.md or AGENTS.md already exists, improve it instead of starting over. Keep it short and factual.";
+
+export async function initProject() {
+  return send(INIT_PROMPT);
+}
+
+export function exportConversation() {
+  const s = getState();
+  const proj = s.projects.find((p) => p.id === s.current);
+  const title = proj?.name || "macron-chat";
+  const lines: string[] = [
+    `# ${title}`,
+    "",
+    `> Exported from Macron Agent ${s.info.version} (SpectorDev — https://t.me/SpectorDev)`,
+    "",
+  ];
+  for (const b of s.blocks) {
+    if (b.kind === "user" && b.text) {
+      lines.push("## User", "", b.text, "");
+    } else if (b.kind === "assistant" && b.text) {
+      lines.push("## Macron", "", b.text, "");
+    } else if (b.kind === "tool") {
+      lines.push(`### Tool: ${b.label || b.name || "tool"}${b.arg ? " — `" + b.arg + "`" : ""}`, "");
+      if (b.output) lines.push("```", b.output, "```", "");
+    } else if (b.kind === "note" && b.text) {
+      lines.push(`> ${b.text}`, "");
+    }
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  a.href = url;
+  a.download = `macron-${title.replace(/[^a-zA-Z0-9_-]+/g, "-")}-${stamp}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function setMode(mode: Mode) {
   try {
     const r = await server.setMode(mode);

@@ -3,14 +3,70 @@ package tui
 import (
 	"context"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
+	"strings"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ProviderChoice struct {
 	ID              int64
 	Name, Model     string
 	Active, Enabled bool
+}
+
+type providerConfigurator interface {
+	ConfigureProvider(ctx context.Context, field, value string) (string, error)
+	TestActiveProvider(ctx context.Context) (string, error)
+}
+
+func (m model) providerCommand(arg string) (tea.Model, tea.Cmd) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return m.providerPicker()
+	}
+	if m.running || m.busy != "" {
+		return m, m.say("Finish or stop the current request first")
+	}
+	cfg, ok := m.e.(providerConfigurator)
+	if !ok {
+		return m, m.say("Provider customization is not supported in this engine")
+	}
+	fields := strings.Fields(arg)
+	sub := strings.ToLower(fields[0])
+	val := ""
+	if len(fields) > 1 {
+		val = strings.ToLower(strings.Join(fields[1:], " "))
+	}
+	switch sub {
+	case "test":
+		m.busy = "Testing provider"
+		return m, tea.Batch(m.spin.Tick, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			out, err := cfg.TestActiveProvider(ctx)
+			if err != nil {
+				return noticeMsg{err: err}
+			}
+			return noticeMsg{text: stOK.Render(bullet) + " " + out}
+		})
+	case "api", "vision", "stream", "failover":
+		if val == "" {
+			return m, m.say("Usage: /provider api <auto|openai|responses|anthropic> | vision <on|off> | stream <on|off> | failover <on|off> | test")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		out, err := cfg.ConfigureProvider(ctx, sub, val)
+		if err != nil {
+			m.print(stFail.Render(bullet) + " " + errText(err))
+			return m, nil
+		}
+		m.info = m.e.Info()
+		m.print(stOK.Render(bullet) + " " + out)
+		return m, nil
+	default:
+		return m, m.say("Usage: /provider [api|vision|stream|failover|test]")
+	}
 }
 
 func (m model) providerPicker() (tea.Model, tea.Cmd) {

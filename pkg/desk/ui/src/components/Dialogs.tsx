@@ -13,6 +13,7 @@ import {
   effortLevels,
   effortName,
   effortNote,
+  exportConversation,
   setTuning,
   windowName,
   chooseModel,
@@ -20,6 +21,7 @@ import {
   compact,
   errorText,
   fail,
+  initProject,
   newChat,
   openDialog,
   openProject,
@@ -40,8 +42,9 @@ import { Icon } from "../icons";
 import type { IconName } from "../icons";
 import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
-import type { Ask, Listing, Plugin, ProviderChoice } from "../types";
-import { ConnectionsSection, MemorySection, SkillsSection, UpdatesSection } from "./SettingsExtras";
+import type { Ask, Listing, Plugin } from "../types";
+import { ProviderEditor, ProvidersSection } from "./ProviderManager";
+import { AboutCard, ConnectionsSection, MemorySection, SkillsSection, SoulSection, StatusDialog, UpdatesSection } from "./SettingsExtras";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
   return (
@@ -84,6 +87,18 @@ export function Dialogs() {
       return (
         <Modal kind="settings" dismiss>
           <Settings />
+        </Modal>
+      );
+    case "status":
+      return (
+        <Modal kind="settings" dismiss>
+          <StatusDialog onClose={closeDialog} />
+        </Modal>
+      );
+    case "provider-edit":
+      return (
+        <Modal kind="settings provider-modal" dismiss>
+          <ProviderEditor key={d.provider ? String(d.provider.id) : "new"} provider={d.provider} />
         </Modal>
       );
     case "mcp-add":
@@ -726,9 +741,12 @@ function Palette({ mode }: { mode: "root" | "models" }) {
       info.model
         ? { id: "model", group: "Actions", label: "Change model…", hint: info.model, icon: "chip", run: () => openDialog({ kind: "palette", mode: "models" }) }
         : { id: "model", group: "Actions", label: "Connect a model…", icon: "chip", run: () => openDialog({ kind: "model-connect" }) },
-      { id: "connect", group: "Actions", label: "Connect another provider…", icon: "plus", run: () => openDialog({ kind: "model-connect" }) },
+      { id: "connect", group: "Actions", label: "Add or customize provider…", icon: "plus", run: () => openDialog({ kind: "provider-edit" }) },
       { id: "folder", group: "Actions", label: "Open folder…", icon: "folder", keys: [mod, "O"], run: () => openDialog({ kind: "folder" }) },
       { id: "changes", group: "Actions", label: "Show git changes & diff", icon: "gitBranch", run: () => toggleChanges(true) },
+      { id: "status", group: "Actions", label: "System & session status", hint: "Model, sandbox, SpectorDev", icon: "info", run: () => openDialog({ kind: "status" }) },
+      { id: "export", group: "Actions", label: "Export conversation as Markdown", icon: "download", run: () => exportConversation() },
+      { id: "init", group: "Actions", label: "Initialize MACRON.md", hint: "Generate project instructions", icon: "file", run: () => void initProject() },
       { id: "mcp", group: "Actions", label: "Add an MCP server…", icon: "plug", run: () => openDialog({ kind: "mcp-add" }) },
       { id: "compact", group: "Actions", label: "Compact the conversation", hint: "Summarise to free room", icon: "layers", run: () => compact() },
       { id: "update", group: "Actions", label: "Check for updates (GitHub)", icon: "download", run: () => void checkUpdate(true) },
@@ -765,7 +783,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const { sel, setSel, listRef, move } = useList(shown.length);
 
   const pick = (e: Entry) => {
-    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect" || e.id === "mcp";
+    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect" || e.id === "mcp" || e.id === "status";
     if (!opensDialog) closeDialog();
     e.run();
   };
@@ -1043,7 +1061,6 @@ function Settings() {
   const servers = useStore((s) => s.servers);
   const tuning = useStore((s) => s.tuning);
   const mod = useMod();
-  const [providers, setProviders] = useState<ProviderChoice[] | null>(null);
   const [plugins, setPlugins] = useState<Plugin[] | null>(null);
   const dialog = useStore((s) => s.dialog);
   const loadPlugins = () =>
@@ -1071,10 +1088,6 @@ function Settings() {
     }
     loadPlugins();
   };
-
-  useEffect(() => {
-    server.providers().then((r) => setProviders(r.providers || [])).catch(() => setProviders([]));
-  }, [info.provider]);
 
   const apply = async (fn: () => Promise<{ info: typeof info }>, _done?: string) => {
     try {
@@ -1178,33 +1191,7 @@ function Settings() {
             <span />
           </button>
         </Section>
-        <div className="set-group">{t("Model")}</div>
-        <div className="set-list">
-          {providers === null && <div className="empty-row">{t("Loading…")}</div>}
-          {providers && !providers.length && <div className="empty-row">No model connected yet.</div>}
-          {(providers || []).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={"set-row" + (p.active ? " on" : "")}
-              disabled={p.active}
-              onClick={() => apply(() => server.setProvider(p.id))}
-            >
-              <span className="radio" />
-              <span className="grow">
-                <span className="name">{p.name}</span>
-                <span className="meta">{p.model || "no model chosen"}</span>
-              </span>
-              {!p.enabled && <span className="meta">disabled</span>}
-            </button>
-          ))}
-          <button type="button" className="set-row" onClick={() => openDialog({ kind: "model-connect" })}>
-            <Icon name="plus" size={14} />
-            <span className="grow">
-              <span className="name">{t("Connect a model")}…</span>
-            </span>
-          </button>
-        </div>
+        <ProvidersSection />
         {tuning && tuning.model && (
           <>
             <Section title={t("Effort")} help={effortNote(tuning)}>
@@ -1250,6 +1237,7 @@ function Settings() {
         )}
         <SkillsSection />
         <MemorySection />
+        <SoulSection />
         <div className="set-group">{t("MCP servers and plugins")}</div>
         <div className="set-list">
           {plugins === null && <div className="empty-row">{t("Loading…")}</div>}
@@ -1338,10 +1326,7 @@ function Settings() {
             </div>
           ))}
         </dl>
-        <div className="about">
-          Macron {info.version} · {info.platform}
-          {info.host ? " · " + info.host : ""}
-        </div>
+        <AboutCard />
       </div>
     </>
   );

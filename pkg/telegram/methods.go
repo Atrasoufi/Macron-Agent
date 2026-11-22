@@ -402,7 +402,7 @@ func GuestHTML(html string, kb *InlineKeyboardMarkup) map[string]any {
 }
 
 func guestArticle(content map[string]any, kb *InlineKeyboardMarkup) map[string]any {
-	r := map[string]any{"type": "article", "id": "answer", "title": "Macron Ai", "input_message_content": content}
+	r := map[string]any{"type": "article", "id": "answer", "title": "Macron Agent", "input_message_content": content}
 	if kb != nil {
 		r["reply_markup"] = kb
 	}

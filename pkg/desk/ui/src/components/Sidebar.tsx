@@ -215,6 +215,9 @@ export function Sidebar() {
           <span className="dot" />
           <span>{online === null ? t("Connecting…") : online ? t("Engine ready") + (version ? " · " + version : "") : t("Reconnecting…")}</span>
         </div>
+        <a className="side-credit" href="https://t.me/SpectorDev" target="_blank" rel="noreferrer" dir="ltr">
+          SpectorDev · MIT
+        </a>
       </div>
     </aside>
   );

@@ -94,6 +94,9 @@ export interface Summary {
 
 export interface Info {
   version: string;
+  creator?: string;
+  creatorUrl?: string;
+  license?: string;
   platform: string;
   host: string;
   model: string;
@@ -103,6 +106,7 @@ export interface Info {
   executionMode?: string;
   sandboxed?: boolean;
   yolo: boolean;
+  failover?: boolean;
   contextWindow: number;
   connections: number;
   services: number;
@@ -142,6 +146,55 @@ export interface ProviderChoice {
   model: string;
   active: boolean;
   enabled: boolean;
+}
+
+export interface ProviderDetail extends ProviderChoice {
+  baseUrl?: string;
+  apiKeySet?: boolean;
+  apiKeyMasked?: string;
+  api?: string;
+  resolvedApi?: string;
+  priority?: number;
+  vision?: boolean;
+  noStream?: boolean;
+  contextWindow?: number;
+  autoWindow?: number;
+  temperature?: number | null;
+  tempLimit?: number;
+  effort?: string;
+  requests?: number;
+  failures?: number;
+  avgLatencyMs?: number;
+  lastOkAt?: string;
+  lastError?: string;
+  lastErrorAt?: string;
+  cooling?: boolean;
+}
+
+export interface ProviderUpsert {
+  name?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  clearKey?: boolean;
+  model?: string;
+  api?: string;
+  priority?: number;
+  enabled?: boolean;
+  vision?: boolean;
+  noStream?: boolean;
+  contextWindow?: number;
+  temperature?: number | null;
+  clearTemp?: boolean;
+  effort?: string;
+  activate?: boolean;
+  skipTest?: boolean;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  reply?: string;
+  latencyMs: number;
+  error?: string;
 }
 
 export interface Connection {

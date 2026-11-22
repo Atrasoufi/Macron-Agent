@@ -581,8 +581,8 @@ func (t *terminal) Yolo(on bool) bool {
 
 func (t *terminal) Status(ctx context.Context) string {
 	var b strings.Builder
-	b.WriteString("Macron Agent " + app.Version)
-	row := func(k, v string) { fmt.Fprintf(&b, "\n  %-10s %s", k, v) }
+	fmt.Fprintf(&b, "%s %s — by %s (%s) · MIT License", app.Name, app.Version, app.Creator, app.CreatorURL)
+	row := func(k, v string) { fmt.Fprintf(&b, "\n  %-11s %s", k, v) }
 	if p, ok := t.prov.Active(); ok {
 		row("model", p.Model+" · provider "+p.Name)
 		row("API", providers.API(p)+" · "+p.BaseURL)
@@ -599,8 +599,13 @@ func (t *terminal) Status(ctx context.Context) string {
 		}
 		row("temperature", temperature)
 	}
+	failover := "on"
+	if t.st != nil && !t.st.SettingBool(store.SettingFailover, true) {
+		failover = "off"
+	}
+	row("failover", failover)
 	row("window", shortCount(t.window())+" tokens")
-	if mc, err := t.mem.Load(ctx, t.uid); err == nil {
+	if mc, err := t.mem.Load(ctx, t.currentUID()); err == nil {
 		conv := fmt.Sprintf("%d messages, %s tokens", mc.Messages, shortCount(mc.Tokens))
 		if mc.Compressions > 0 {
 			conv += fmt.Sprintf(" · summarized %d times", mc.Compressions)
@@ -778,4 +783,91 @@ func (t *terminal) SetProvider(ctx context.Context, id int64) error {
 		return err
 	}
 	return t.prov.Reload(ctx)
+}
+
+func (t *terminal) ConfigureProvider(ctx context.Context, field, value string) (string, error) {
+	if field == "failover" {
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		if err := t.st.SetSetting(ctx, store.SettingFailover, fmt.Sprint(on)); err != nil {
+			return "", err
+		}
+		if on {
+			return "Auto-failover: on", nil
+		}
+		return "Auto-failover: off", nil
+	}
+	id := t.prov.ActiveID()
+	if id == 0 {
+		return "", errors.New("no provider is active")
+	}
+	p, err := t.st.Provider(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	var summary string
+	switch field {
+	case "api":
+		switch value {
+		case "auto", "default":
+			p.API = ""
+			summary = fmt.Sprintf("Provider %s API: auto (%s)", p.Name, providers.API(*p))
+		case llm.APIOpenAI, llm.APIResponses, llm.APIAnthropic:
+			p.API = value
+			summary = fmt.Sprintf("Provider %s API: %s", p.Name, value)
+		default:
+			return "", errors.New("API must be auto, openai, responses, or anthropic")
+		}
+	case "vision":
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		p.Vision = on
+		summary = fmt.Sprintf("Provider %s vision: %v", p.Name, on)
+	case "stream":
+		on, err := parseBoolToggle(value)
+		if err != nil {
+			return "", err
+		}
+		p.NoStream = !on
+		summary = fmt.Sprintf("Provider %s streaming: %v", p.Name, on)
+	default:
+		return "", fmt.Errorf("unknown provider setting %q", field)
+	}
+	normalized, err := providers.Normalize(*p)
+	if err != nil {
+		return "", err
+	}
+	if err := t.st.UpdateProvider(ctx, normalized); err != nil {
+		return "", err
+	}
+	if err := t.prov.Reload(ctx); err != nil {
+		return "", err
+	}
+	return summary, nil
+}
+
+func (t *terminal) TestActiveProvider(ctx context.Context) (string, error) {
+	p, ok := t.prov.Active()
+	if !ok {
+		return "", errors.New("no provider is active")
+	}
+	res, err := t.prov.Test(ctx, p)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Provider %s (%s) OK in %s: %q", p.Name, p.Model, res.Latency.Round(time.Millisecond), shortText(res.Reply, 60)), nil
+}
+
+func parseBoolToggle(v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "true", "yes", "1":
+		return true, nil
+	case "off", "false", "no", "0":
+		return false, nil
+	}
+	return false, fmt.Errorf("expected on or off, got %q", v)
 }

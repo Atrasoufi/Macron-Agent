@@ -74,7 +74,17 @@ func (h *deskHost) any() *terminal {
 
 func (h *deskHost) Info() desk.Info {
 	host, _ := os.Hostname()
-	i := desk.Info{Version: app.Version, Platform: runtime.GOOS, Host: host, Approvals: h.w.bot.gateMode(), ContextWindow: h.w.window()}
+	i := desk.Info{
+		Version:       app.Version,
+		Creator:       app.Creator,
+		CreatorURL:    app.CreatorURL,
+		License:       app.License,
+		Platform:      runtime.GOOS,
+		Host:          host,
+		Approvals:     h.w.bot.gateMode(),
+		ContextWindow: h.w.window(),
+		Failover:      h.w.st.SettingBool(store.SettingFailover, true),
+	}
 	i.Yolo, _ = h.w.gate.Yolo()
 	if h.w.app != nil && h.w.app.Machine != nil {
 		i.ExecutionMode = h.w.app.Machine.ExecutionMode()

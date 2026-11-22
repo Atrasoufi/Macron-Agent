@@ -142,12 +142,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/threads/{tid}", s.deleteThreadAPI)
 	mux.HandleFunc("GET /api/projects/{id}/file", s.fileAPI)
 	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealAPI)
+	mux.HandleFunc("POST /api/projects/{id}/shell", s.shellAPI)
+	mux.HandleFunc("GET /api/projects/{id}/status", s.projectStatusAPI)
 	mux.HandleFunc("GET /api/models", s.modelsAPI)
 	mux.HandleFunc("POST /api/model", s.setModelAPI)
-	mux.HandleFunc("GET /api/providers", s.providersAPI)
+	mux.HandleFunc("GET /api/providers", s.providersDetailAPI)
+	mux.HandleFunc("POST /api/providers", s.addProviderAPI)
+	mux.HandleFunc("PUT /api/providers/{id}", s.updateProviderAPI)
+	mux.HandleFunc("DELETE /api/providers/{id}", s.deleteProviderAPI)
+	mux.HandleFunc("POST /api/providers/{id}/test", s.testProviderAPI)
+	mux.HandleFunc("GET /api/providers/{id}/models", s.providerModelsAPI)
 	mux.HandleFunc("POST /api/provider", s.setProviderAPI)
 	mux.HandleFunc("POST /api/providers/connect", s.connectModelAPI)
 	mux.HandleFunc("POST /api/providers/models", s.listModelsAPI)
+	mux.HandleFunc("POST /api/failover", s.failoverAPI)
+	mux.HandleFunc("GET /api/soul", s.soulGetAPI)
+	mux.HandleFunc("POST /api/soul", s.soulSaveAPI)
 	mux.HandleFunc("GET /api/plugins", s.pluginsAPI)
 	mux.HandleFunc("POST /api/plugins", s.addPluginAPI)
 	mux.HandleFunc("POST /api/plugins/{key}/enable", s.enablePluginAPI)
@@ -649,15 +659,6 @@ func (s *Server) setModelAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	s.hub.publish(map[string]any{"type": "info"})
 	writeJSON(w, s.info())
-}
-
-func (s *Server) providersAPI(w http.ResponseWriter, r *http.Request) {
-	list, err := s.host.Providers(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, map[string]any{"providers": list})
 }
 
 func (s *Server) setProviderAPI(w http.ResponseWriter, r *http.Request) {

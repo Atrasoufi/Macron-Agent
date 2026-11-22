@@ -112,10 +112,11 @@ func (io *IO) yes(q string, def bool) bool {
 	return def
 }
 
-const usage = `Macron Agent %s: a personal AI agent that works on this machine.
+const usage = `Macron Agent %s — by SpectorDev (https://t.me/SpectorDev) · MIT License
 
 Usage:
   macron                  the agent in this terminal, working in the current folder
+  macron desktop          launch the native Desktop application
   macron telegram         connect the Telegram bot and keep it running (status, logs, restart…)
   macron bale run         chat and use tools in Bale (BALE_BOT_TOKEN, MACRON_BALE_OWNERS)
   macron rubika run       chat and use tools in Rubika (RUBIKA_BOT_TOKEN, MACRON_RUBIKA_OWNERS)
@@ -130,6 +131,7 @@ Usage:
   macron backup [FILE]    save the home folder (database and notes) as one archive
   macron --check          validate local startup (no external API calls)
   macron --check-online   also test the configured messenger connection
+  macron about            show version, SpectorDev credits, and license
   macron version
 
 Everything the agent is lives in one folder: %s
@@ -168,6 +170,9 @@ func Run(args []string, io *IO) (handled bool, code int) {
 		return true, uninstall(io, rest)
 	case "backup":
 		return true, backup(io, rest)
+	case "about":
+		io.printf("%s %s\nBuilt by %s (%s)\nLicense: %s\n", app.Name, app.Version, app.Creator, app.CreatorURL, app.License)
+		return true, 0
 	case "version", "--version", "-v":
 		io.println("macron", app.Version)
 		return true, 0

@@ -17,7 +17,9 @@ func init() {
 		"💪 مدل قوی — %s\n": "💪 Strong model — %s\n",
 		personalWelcome: `Hi %s, %s
 
-I'm <b>Macron</b>, your personal assistant living on your own server 🏠
+I'm <b>Macron</b>, your personal AI assistant living on your own server 🏠
+Developed by <b>SpectorDev Team</b> (<a href="https://t.me/SpectorDev">@SpectorDev</a>) · MIT License.
+
 I do whatever a person at a computer can: search, files, code, servers, downloads, pictures and songs… I have full access to this very machine, so I can install programs, bring services up and edit the server's files.
 
 <b>Everything I learn is yours</b>
@@ -25,15 +27,14 @@ I do whatever a person at a computer can: search, files, code, servers, download
 • What I know how to do are «skills»; after hard jobs I take a lesson and do them better next time.
 • Every conversation of ours is archived for good; ask «what was that server we talked about last year?»
 
-<b>Commands</b>
-/new — a fresh conversation
-/memory — my memory and files
-/files — my files
-/reminders — reminders and scheduled jobs
-/tasks — background jobs
-/settings — the panel: models, search, learning and settings
-/language — language (فارسی / English)
-/help — help`,
+<b>Quick commands</b>
+/status — active model, sandbox and context status
+/new — fresh conversation · /compact — compact context
+/memory — memory and files · /files — my files
+/reminders — reminders · /tasks — background jobs
+/settings — admin panel · /execution — execution mode & sandbox
+/language — language (فارسی / English) · /about — about SpectorDev
+/help — full command reference`,
 		personalHelp: `<b>How to work with me</b>
 
 Write the way you talk to a colleague. I work out what is needed: search, files, code, commands on the server, downloads, pictures, charts, PDFs…
@@ -43,26 +44,36 @@ Write the way you talk to a colleague. I work out what is needed: search, files,
 • <b>Reminders and scheduled jobs:</b> «every day at 8 send me the server status». List and cancel with /reminders
 • <b>Background jobs:</b> long jobs go to the background and their result comes separately (/tasks).
 • <b>Memory:</b> «remember …» is saved in USER.md or MEMORY.md. See and delete with /memory, or edit the files in my home folder.
-• <b>The past:</b> every conversation we had is searchable; say «remember what we said about …?»
-• <b>Connecting:</b> say it in the chat: a server (SSH), GitHub, an MCP server, a plugin or a new skill; «connect this server: address, user, password or key». I connect it myself and show you.
-• <b>Learning:</b> from jobs that first break and then work I take lessons and write them into my skills; skills are files in the <code>skills</code> folder of my home, and you can see and edit them too.
+• <b>The past:</b> every conversation we had is searchable; ask or use /search.
+• <b>Connecting:</b> say it in chat: SSH server, GitHub, MCP server, plugin or a new skill.
 
-/new — a fresh conversation
-/memory — memory and files
-/mode — answer mode (⚡ fast / 🧠 deep)
-/files — my files
-/reminders — reminders
-/tasks — background jobs
-/settings — the panel
-/language — language (فارسی / English)
-/cancel — stop the current job`,
+<b>Everyday commands</b>
+/start — intro · /help — help
+/status — model, execution & memory status · /me — account usage
+/new — fresh conversation · /compact — compact conversation memory
+/queue — queue next independent task · /cancel — stop current job
+/mode — response mode (⚡ fast / 🧠 deep) · /language — bot language
+/memory — memory & files · /files — manage files · /cookies — download cookies
+/reminders — reminders & schedules · /tasks — background jobs
+/id — user & chat IDs · /about — SpectorDev team & MIT License
+
+<b>Admin & owner commands</b>
+/settings — admin panel (providers, routing, tools, settings)
+/execution · /sandbox — execution mode & sandbox isolation
+/yolo — command approval mode · /approve — approve pending command
+/board — task board · /dashboard — web dashboard · /search — search archive
+/moa — multi-model voting · /learn — learning · /teach — teach a lesson
+/update — update directly from GitHub Releases
+
+👥 <i>Developed by SpectorDev Team (<a href="https://t.me/SpectorDev">@SpectorDev</a>) · MIT License</i>`,
 		personalHomeFmt: `
 
 🤖 Active provider: %s
 ⏰ Active schedules: %d reminders · %d jobs
 💬 Archived conversations: %s messages
 📁 Home folder: <code>%s</code>
-⏱ Online for %s`,
+⏱ Online for %s
+👥 SpectorDev Team (<a href="https://t.me/SpectorDev">@SpectorDev</a>) · MIT License`,
 
 		"🧠 <b>یه درس تازه یاد گرفتم</b> و توی مهارت‌هام نوشتمش:": "🧠 <b>I learned a new lesson</b> and wrote it into my skills:",
 		"↩️ پس بگیر":                                "↩️ Take it back",

@@ -361,6 +361,15 @@ func (b *Bot) handleMessage(m *telegram.Message) {
 	case "/me":
 		b.sendMe(ctx, m, user)
 		return
+	case "/status":
+		b.statusCommand(ctx, m, l)
+		return
+	case "/about":
+		b.aboutCommand(m, l)
+		return
+	case "/compact":
+		b.compactCommand(ctx, m, l)
+		return
 	case "/new":
 		if err := b.mem.Reset(ctx, uid); err != nil {
 			b.reply(m, l.t(textError))
@@ -572,6 +581,8 @@ func (b *Bot) handleCallback(q *telegram.CallbackQuery) {
 		b.handleUpdateCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "me:"):
 		b.handleMeCallback(ctx, q, answer)
+	case strings.HasPrefix(q.Data, "st:"):
+		b.handleStatusCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "m:"):
 		b.handleMemoryCallback(ctx, q, answer)
 	case strings.HasPrefix(q.Data, "f:"):

@@ -699,11 +699,12 @@ func (p *project) run(ctx context.Context, cancel context.CancelFunc, sess Sessi
 	}
 	queued := p.queue
 	p.queue = nil
-	p.live = Live{Usage: map[string]int{"in": p.usageIn, "out": p.usageOut}}
+	lastCtx := p.live.Context
+	p.live = Live{Context: lastCtx, Usage: map[string]int{"in": p.usageIn, "out": p.usageOut}}
 	p.cancel = nil
 	p.mu.Unlock()
 	took := time.Since(started)
-	done := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "usage": map[string]int{"in": p.usageIn, "out": p.usageOut}}
+	done := map[string]any{"blocks": out, "took": took.Milliseconds(), "stopped": stopped, "context": lastCtx, "usage": map[string]int{"in": p.usageIn, "out": p.usageOut}}
 	if stopped && len(queued) > 0 {
 		done["requeue"] = queued
 	}

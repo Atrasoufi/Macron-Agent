@@ -15,12 +15,13 @@ A personal AI agent built in Go for Windows, Linux, and macOS — across Desktop
 [![Release](https://img.shields.io/github/v/release/Metixpro/Macron-Agent?style=flat-square&color=55c9a5&labelColor=111820)](https://github.com/Metixpro/Macron-Agent/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/Metixpro/Macron-Agent/ci.yml?branch=main&style=flat-square&label=CI&labelColor=111820)](https://github.com/Metixpro/Macron-Agent/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white&labelColor=111820)](go.mod)
-[![License: MIT](https://img.shields.io/badge/License-MIT-55c9a5?style=flat-square&labelColor=111820)](LICENSE)
+[![SpectorDev](https://img.shields.io/badge/Team-SpectorDev-55c9a5?style=flat-square&logo=telegram&logoColor=white&labelColor=111820)](https://t.me/SpectorDev)
+[![License: MIT](https://img.shields.io/badge/License-MIT%20(SpectorDev)-55c9a5?style=flat-square&labelColor=111820)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-3b4754?style=flat-square&labelColor=111820)](https://github.com/Metixpro/Macron-Agent/releases/latest)
 
 <br>
 
-**[راهنمای فارسی](#persian)** · **[English Guide](#english)** · **[Downloads / دریافت](https://github.com/Metixpro/Macron-Agent/releases/latest)** · **[Server Guide](SERVER.md)** · **[Connections](docs/messengers-email.md)** · **[Testing](docs/testing.md)**
+**[راهنمای فارسی](#persian)** · **[English Guide](#english)** · **[SpectorDev Channel](https://t.me/SpectorDev)** · **[Downloads / دریافت](https://github.com/Metixpro/Macron-Agent/releases/latest)** · **[Server Guide](SERVER.md)** · **[Connections](docs/messengers-email.md)**
 
 </div>
 
@@ -410,6 +411,6 @@ To install optional Python/browser tools from a source checkout, run `./install.
 
 <div align="center">
 
-Licensed under the **[MIT License](LICENSE)** · Made with Go & React
+Developed by **[SpectorDev Team](https://t.me/SpectorDev)** (`@SpectorDev`) · Licensed under the **[MIT License](LICENSE)** · Built with Go & React
 
 </div>

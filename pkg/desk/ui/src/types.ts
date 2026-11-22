@@ -272,6 +272,12 @@ export interface UpdateStatus {
   installing?: boolean;
   installed?: boolean;
   step?: string;
+  phase?: string;
+  downloaded?: number;
+  total?: number;
+  percent?: number;
+  speedBps?: number;
+  assetSize?: number;
   error?: string;
   checkedAt?: number;
 }

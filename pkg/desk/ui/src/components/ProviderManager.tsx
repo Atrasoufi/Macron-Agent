@@ -46,6 +46,25 @@ function apiBadge(api?: string): string {
   }
 }
 
+function cleanProviderError(raw: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  const statusMatch = s.match(/status\s+(\d{3})/i);
+  const statusPrefix = statusMatch ? `HTTP ${statusMatch[1]} · ` : "";
+  const brace = s.indexOf("{");
+  if (brace >= 0) {
+    try {
+      const parsed = JSON.parse(s.slice(brace)) as { error?: { message?: string; code?: string }; message?: string };
+      const msg = parsed?.error?.message || parsed?.message;
+      if (msg) return statusPrefix + msg.trim();
+    } catch {
+      const m = s.match(/"message"\s*:\s*"([^"]+)"/);
+      if (m?.[1]) return statusPrefix + m[1].trim();
+    }
+  }
+  return s;
+}
+
 function parseWindowInput(raw: string): number | null {
   const s = raw.trim().toLowerCase().replace(/[,_\s]/g, "");
   if (!s || s === "auto" || s === "0") return 0;
@@ -221,12 +240,12 @@ export function ProvidersSection() {
               </div>
               {tr && (
                 <div className={"pv-test-res" + (tr.ok ? " ok" : " bad")} dir="ltr">
-                  {tr.ok ? `✓ ${tr.latencyMs}ms — ${tr.reply || "OK"}` : `✗ ${tr.error || "Test failed"}`}
+                  {tr.ok ? `✓ ${tr.latencyMs}ms — ${tr.reply || "OK"}` : `✗ ${cleanProviderError(tr.error || "Test failed")}`}
                 </div>
               )}
               {!tr && p.lastError && (
                 <div className="pv-test-res bad" dir="ltr">
-                  {p.lastError}
+                  {cleanProviderError(p.lastError)}
                 </div>
               )}
             </div>

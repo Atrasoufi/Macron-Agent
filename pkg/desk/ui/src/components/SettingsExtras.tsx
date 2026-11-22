@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { checkUpdate, fail, installUpdate } from "../actions";
 import { server } from "../api";
+import { bytes } from "../format";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { setState, useStore } from "../store";
@@ -21,20 +22,37 @@ export function UpdatesSection() {
     setChecking(false);
   };
 
+  const pct = Math.max(0, Math.min(100, Math.round(upd?.percent || 0)));
+  const total = upd?.total || upd?.assetSize || 0;
+  const downloaded = upd?.downloaded || 0;
+  const speed = upd?.speedBps || 0;
+  const phaseLabel = upd?.step ? t(upd.step) : t("Updating…");
+  const telemetry =
+    upd?.phase === "downloading" && total > 0
+      ? `${bytes(downloaded)} / ${bytes(total)}${speed > 0 ? ` · ${bytes(speed)}/s` : ""}`
+      : upd?.phase === "downloading" && downloaded > 0
+        ? `${bytes(downloaded)}${speed > 0 ? ` · ${bytes(speed)}/s` : ""}`
+        : "";
+
   return (
     <>
       <div className="set-group">{t("Updates")}</div>
       <div className="set-list">
         <div className="set-row static upd-row">
-          <span className={"state" + (upd?.available ? " warn" : upd?.installed || (upd && !upd.error) ? " ok" : "")} />
+          <span className={"state" + (upd?.installing ? " warn" : upd?.available ? " warn" : upd?.installed || (upd && !upd.error) ? " ok" : "")} />
           <span className="grow">
             <span className="name">
               Macron v{info.version || upd?.current}
               {upd?.available && upd.latest ? ` → v${upd.latest}` : ""}
+              {upd?.available && total > 0 && !upd.installing && (
+                <span className="tag" dir="ltr">
+                  {bytes(total)}
+                </span>
+              )}
             </span>
-            <span className={"meta" + (upd?.error ? " bad-text" : "")}>
+            <span className={"meta" + (upd?.error && !upd?.installing ? " bad-text" : "")}>
               {upd?.installing
-                ? upd.step || t("Updating…")
+                ? `${phaseLabel} · ${pct}%`
                 : upd?.installed
                   ? t("Updated — restart Macron")
                   : upd?.error
@@ -48,7 +66,7 @@ export function UpdatesSection() {
           </span>
           {upd?.available && !upd.installed ? (
             <button type="button" className="btn primary sm" disabled={upd.installing} onClick={() => installUpdate()}>
-              {upd.installing ? t("Updating…") : t("Install update")}
+              {upd.installing ? `${pct}%` : upd.error ? t("Retry") : t("Install update")}
             </button>
           ) : (
             <button type="button" className="btn ghost sm" disabled={checking || upd?.installing} onClick={runCheck}>
@@ -56,6 +74,19 @@ export function UpdatesSection() {
             </button>
           )}
         </div>
+        {upd?.installing && (
+          <div className="upd-set-prog">
+            <div className="upd-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+              <span className={"upd-fill" + (pct < 3 ? " indet" : "")} style={{ width: `${Math.max(pct, 4)}%` }} />
+            </div>
+            <div className="upd-sub">
+              <span className="upd-phase">{phaseLabel}</span>
+              <span className="upd-meta" dir="ltr">
+                {telemetry ? `${telemetry} · ${pct}%` : `${pct}%`}
+              </span>
+            </div>
+          </div>
+        )}
         {upd?.available && upd.notes && (
           <details className="upd-notes">
             <summary>{t("Release notes")}</summary>

@@ -699,4 +699,15 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
   - Telegram Bot adds `/status`, `/compact`, and `/about`, syncs every handled command (`/status`, `/execution`, `/sandbox`, `/compact`, `/about`, etc.) into Telegram's `SetMyCommands` menu and `/help`, backed by regression tests.
 - **SpectorDev Team identity & MIT License**: unified SpectorDev Team (`https://t.me/SpectorDev`) creator identity and MIT License attribution across `LICENSE`, `pkg/app`, `SOUL.md` / `DefaultPersona`, CLI (`macron about`), TUI, Telegram Bot, Desktop UI, and Windows installer metadata.
 
+### 1.18.0: Frosted-glass chrome desktop craft, live download progress updater & UI bug fixes
+
+- **Live Desktop Auto-Updater with real download progress bar**: `pkg/updater.InstallWithProgress` streams live download byte counts, total package size, transfer speed (`MB/s`), percentage (`0–100%`), and phase labels (`Downloading update`, `Verifying SHA-256`, `Extracting package`, `Verifying new binary`, `Installing desktop app`, `Ready to restart`) over Desktop SSE events to both the Sidebar Update Card and Settings → Updates, replacing the previous clipped filename button.
+- **Human-crafted frosted-glass & machined-chrome Desktop UI**: redesigned the floating Composer dock, sticky Header, Dialogs, Command Palette, Session Search, Slash/Effort/Machine menus, and Sidebar Update Card with real translucent frosted glass (`backdrop-filter: blur`), subtle top specular chrome bevels, layered obsidian/alabaster surface depth, and zero generic AI-purple styling (replacing MoA/Auto-Route pills with understated chrome status indicators).
+- **UI & Upgrade Bug Fixes**:
+  - Fixed horizontal overflow in provider test/error boxes (`cleanProviderError` extracts clean human-readable messages from JSON API errors and wraps cleanly within the card).
+  - Fixed mixed Persian/English thread and workspace preview alignment inside the Sidebar so Persian titles stay anchored beside their active indicator.
+  - Fixed bottom sidebar clearance so `Engine ready` and `SpectorDev · MIT` never clip on Windows.
+  - Added automatic legacy `SOUL.md` migration (`pkg/brain`) so users upgrading from pre-SpectorDev versions automatically receive the official SpectorDev identity while preserving custom user-written `SOUL.md` files.
+
+
 

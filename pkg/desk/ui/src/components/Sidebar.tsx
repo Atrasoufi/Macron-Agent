@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { deleteThread, installUpdate, loadServers, openDialog, openProject, removeProject, switchMachine, switchThread } from "../actions";
-import { ago, shortPath } from "../format";
+import { ago, bytes, shortPath } from "../format";
 import { useMod } from "../hooks";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
@@ -178,18 +178,64 @@ function UpdateCard() {
   const t = useT();
   const upd = useStore((s) => s.update);
   const machine = useStore((s) => s.machine);
-  if (machine || !upd || (!upd.available && !upd.installing && !upd.installed)) return null;
+  if (machine || !upd || (!upd.available && !upd.installing && !upd.installed && !upd.error)) return null;
+  if (upd.error && !upd.available && !upd.installing) return null;
+  const pct = Math.max(0, Math.min(100, Math.round(upd.percent || 0)));
+  const total = upd.total || upd.assetSize || 0;
+  const downloaded = upd.downloaded || 0;
+  const speed = upd.speedBps || 0;
+  const phaseLabel = upd.step ? t(upd.step) : t("Updating…");
+  const telemetry =
+    upd.phase === "downloading" && total > 0
+      ? `${bytes(downloaded)} / ${bytes(total)}${speed > 0 ? ` · ${bytes(speed)}/s` : ""}`
+      : upd.phase === "downloading" && downloaded > 0
+        ? `${bytes(downloaded)}${speed > 0 ? ` · ${bytes(speed)}/s` : ""}`
+        : "";
+
   return (
-    <div className={"upd-card" + (upd.installed ? " done" : "")}>
+    <div className={"upd-card" + (upd.installed ? " done" : upd.installing ? " busy" : upd.error ? " err" : "")}>
       <div className="upd-top">
-        <Icon name="download" size={14} />
-        <span className="grow">
-          {upd.installed ? t("Updated — restart Macron") : `${t("Update available")} · v${upd.latest}`}
+        <span className={"upd-dot" + (upd.installed ? " done" : upd.installing ? " busy" : upd.error ? " err" : "")} />
+        <span className="grow upd-title">
+          {upd.installed
+            ? t("Updated — restart Macron")
+            : upd.installing
+              ? `${t("Updating")} v${upd.latest || ""}`
+              : `${t("Update available")} · v${upd.latest}`}
         </span>
+        {!upd.installing && !upd.installed && total > 0 && (
+          <span className="upd-size" dir="ltr">
+            {bytes(total)}
+          </span>
+        )}
+        {upd.installing && (
+          <span className="upd-pct" dir="ltr">
+            {pct}%
+          </span>
+        )}
       </div>
-      {!upd.installed && (
-        <button type="button" className="upd-btn" disabled={upd.installing} onClick={() => installUpdate()}>
-          {upd.installing ? upd.step || t("Updating…") : t("Update now")}
+
+      {upd.installing && (
+        <div className="upd-prog">
+          <div className="upd-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <span className={"upd-fill" + (pct < 3 ? " indet" : "")} style={{ width: `${Math.max(pct, 4)}%` }} />
+          </div>
+          <div className="upd-sub">
+            <span className="upd-phase">{phaseLabel}</span>
+            {telemetry && (
+              <span className="upd-meta" dir="ltr">
+                {telemetry}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!upd.installing && upd.error && <div className="upd-err" dir="auto">{upd.error}</div>}
+
+      {!upd.installing && !upd.installed && (
+        <button type="button" className="upd-btn" onClick={() => installUpdate()}>
+          {upd.error ? t("Retry") : t("Update now")}
         </button>
       )}
     </div>

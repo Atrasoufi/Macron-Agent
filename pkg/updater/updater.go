@@ -155,28 +155,80 @@ func Latest(ctx context.Context, tag string) (*Release, error) {
 	return &rel, nil
 }
 
-func download(ctx context.Context, url string, limit int64) ([]byte, error) {
+type Progress struct {
+	Phase      string
+	Label      string
+	Downloaded int64
+	Total      int64
+	Percent    int
+	SpeedBps   int64
+}
+
+func downloadWithProgress(ctx context.Context, url string, limit, knownTotal int64, onBytes func(downloaded, total, speedBps int64)) ([]byte, error) {
 	resp, err := get(ctx, url, false)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err != nil {
-		return nil, err
+
+	total := resp.ContentLength
+	if total <= 0 {
+		total = knownTotal
 	}
-	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("%s is larger than %d MB", url, limit>>20)
+	var buf bytes.Buffer
+	if total > 0 && total <= limit {
+		buf.Grow(int(total))
 	}
-	return data, nil
+	chunk := make([]byte, 32<<10)
+	started := time.Now()
+	lastEmit := time.Time{}
+	var downloaded int64
+
+	for {
+		n, rerr := resp.Body.Read(chunk)
+		if n > 0 {
+			downloaded += int64(n)
+			if downloaded > limit {
+				return nil, fmt.Errorf("%s is larger than %d MB", url, limit>>20)
+			}
+			_, _ = buf.Write(chunk[:n])
+			if onBytes != nil && (lastEmit.IsZero() || time.Since(lastEmit) >= 100*time.Millisecond) {
+				elapsed := time.Since(started).Seconds()
+				var bps int64
+				if elapsed > 0.05 {
+					bps = int64(float64(downloaded) / elapsed)
+				}
+				onBytes(downloaded, total, bps)
+				lastEmit = time.Now()
+			}
+		}
+		if errors.Is(rerr, io.EOF) {
+			break
+		}
+		if rerr != nil {
+			return nil, rerr
+		}
+	}
+	if onBytes != nil {
+		elapsed := time.Since(started).Seconds()
+		var bps int64
+		if elapsed > 0.02 {
+			bps = int64(float64(downloaded) / elapsed)
+		}
+		if total <= 0 {
+			total = downloaded
+		}
+		onBytes(downloaded, total, bps)
+	}
+	return buf.Bytes(), nil
 }
 
-func downloadAsset(ctx context.Context, browserURL, apiURL string, limit int64) ([]byte, error) {
-	data, err := download(ctx, browserURL, limit)
+func downloadAssetWithProgress(ctx context.Context, browserURL, apiURL string, limit, knownTotal int64, onBytes func(downloaded, total, speedBps int64)) ([]byte, error) {
+	data, err := downloadWithProgress(ctx, browserURL, limit, knownTotal, onBytes)
 	if err == nil || !strings.HasPrefix(apiURL, ReleaseAPI+"/assets/") {
 		return data, err
 	}
-	data, fallbackErr := download(ctx, apiURL, limit)
+	data, fallbackErr := downloadWithProgress(ctx, apiURL, limit, knownTotal, onBytes)
 	if fallbackErr != nil {
 		return nil, fmt.Errorf("download failed (%v); asset API: %w", err, fallbackErr)
 	}
@@ -231,15 +283,29 @@ func extractFile(archive []byte, name string) ([]byte, error) {
 }
 
 func Install(ctx context.Context, rel *Release, step func(string)) error {
-	if step == nil {
-		step = func(string) {}
+	var last string
+	return InstallWithProgress(ctx, rel, func(p Progress) {
+		if step == nil || p.Label == "" || p.Label == last {
+			return
+		}
+		last = p.Label
+		step(p.Label)
+	})
+}
+
+func InstallWithProgress(ctx context.Context, rel *Release, onProgress func(Progress)) error {
+	emit := func(p Progress) {
+		if onProgress != nil {
+			onProgress(p)
+		}
 	}
 	want := AssetName(rel.Version())
 	var archiveURL, sumsURL, archiveAPI, sumsAPI string
+	var archiveSize int64
 	for _, a := range rel.Assets {
 		switch a.Name {
 		case want:
-			archiveURL, archiveAPI = a.URL, a.APIURL
+			archiveURL, archiveAPI, archiveSize = a.URL, a.APIURL, a.Size
 		case "SHA256SUMS":
 			sumsURL, sumsAPI = a.URL, a.APIURL
 		}
@@ -247,21 +313,41 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 	if archiveURL == "" || sumsURL == "" {
 		return fmt.Errorf("the release has no %s (or no SHA256SUMS): nothing for %s/%s", want, runtime.GOOS, runtime.GOARCH)
 	}
-	step("download " + want)
-	archive, err := downloadAsset(ctx, archiveURL, archiveAPI, 300<<20)
+
+	emit(Progress{Phase: "downloading", Label: "Downloading update", Total: archiveSize, Percent: 2})
+	archive, err := downloadAssetWithProgress(ctx, archiveURL, archiveAPI, 300<<20, archiveSize, func(done, total, bps int64) {
+		pct := 5
+		if total > 0 {
+			pct = 2 + int(done*80/total)
+			if pct > 82 {
+				pct = 82
+			}
+		}
+		emit(Progress{
+			Phase:      "downloading",
+			Label:      "Downloading update",
+			Downloaded: done,
+			Total:      total,
+			Percent:    pct,
+			SpeedBps:   bps,
+		})
+	})
 	if err != nil {
 		return err
 	}
-	sums, err := downloadAsset(ctx, sumsURL, sumsAPI, 1<<20)
+
+	emit(Progress{Phase: "verifying", Label: "Verifying SHA-256", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 85})
+	sums, err := downloadAssetWithProgress(ctx, sumsURL, sumsAPI, 1<<20, 0, nil)
 	if err != nil {
 		return err
 	}
-	step("check SHA256SUMS")
 	wantSum, found := ChecksumOf(string(sums), want)
 	got := sha256.Sum256(archive)
 	if !found || hex.EncodeToString(got[:]) != wantSum {
 		return errors.New("the download does not match its SHA-256 sum: it is NOT installed")
 	}
+
+	emit(Progress{Phase: "extracting", Label: "Extracting package", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 90})
 	bin, err := ExtractBinary(archive)
 	if err != nil {
 		return err
@@ -271,28 +357,36 @@ func Install(ctx context.Context, rel *Release, step func(string)) error {
 		return err
 	}
 	if runtime.GOOS == "windows" && strings.Contains(strings.ToLower(filepath.Base(self)), "desktop") {
-		step("update the desktop app")
+		emit(Progress{Phase: "installing", Label: "Installing desktop app", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 95})
 		data, err := extractFile(archive, "macron-desktop.exe")
 		if err != nil {
 			return err
 		}
-		return replace(self, data)
+		if err := replace(self, data); err != nil {
+			return err
+		}
+		emit(Progress{Phase: "done", Label: "Ready to restart", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 100})
+		return nil
 	}
-	step("preflight the new program")
+
+	emit(Progress{Phase: "preflight", Label: "Verifying new binary", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 93})
 	if err := Swap(self, bin, rel.Version()); err != nil {
 		return err
 	}
 	if runtime.GOOS == "windows" {
 		desktop := filepath.Join(filepath.Dir(self), "macron-desktop.exe")
 		if _, err := os.Stat(desktop); err == nil {
-			step("update the desktop app")
+			emit(Progress{Phase: "installing", Label: "Updating desktop app", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 97})
 			data, err := extractFile(archive, "macron-desktop.exe")
 			if err != nil {
 				return err
 			}
-			return replace(desktop, data)
+			if err := replace(desktop, data); err != nil {
+				return err
+			}
 		}
 	}
+	emit(Progress{Phase: "done", Label: "Ready to restart", Downloaded: int64(len(archive)), Total: int64(len(archive)), Percent: 100})
 	return nil
 }
 

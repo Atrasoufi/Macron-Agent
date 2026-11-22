@@ -84,6 +84,10 @@ func (h *deskHost) Info() desk.Info {
 		Approvals:     h.w.bot.gateMode(),
 		ContextWindow: h.w.window(),
 		Failover:      h.w.st.SettingBool(store.SettingFailover, true),
+		RoutingActive: h.w.bot.routerConf(tierOwner).on,
+	}
+	if act, _ := h.w.st.Setting(settingMoaActive); act != "" {
+		i.MoaActive = act
 	}
 	i.Yolo, _ = h.w.gate.Yolo()
 	if h.w.app != nil && h.w.app.Machine != nil {

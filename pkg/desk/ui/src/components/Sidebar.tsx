@@ -102,22 +102,26 @@ const ThreadList = memo(function ThreadList({ threads, active }: { threads: Thre
       {threads.map((th) => (
         <div key={th.id} className={"thread-row" + (th.id === active ? " on" : "")}>
           <button type="button" className="thread-hit" onClick={() => switchThread(th.id)} title={th.title}>
+            <span className={"thread-dot" + (th.id === active ? " on" : "")} aria-hidden="true" />
             <span className="thread-title" dir="auto">
               {th.title === "New conversation" ? t("New conversation") : th.title}
             </span>
+          </button>
+          <span className="thread-trail">
             {th.updated > 0 && <span className="thread-ago">{ago(th.updated)}</span>}
-          </button>
-          <button
-            type="button"
-            className="thread-del"
-            title={t("Remove")}
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteThread(th.id);
-            }}
-          >
-            <Icon name="x" size={12} />
-          </button>
+            <button
+              type="button"
+              className="thread-del"
+              title={t("Remove")}
+              aria-label={t("Remove")}
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteThread(th.id);
+              }}
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </span>
         </div>
       ))}
     </div>
@@ -133,23 +137,35 @@ const Row = memo(function Row({ p, on, isHome, home }: { p: Summary; on: boolean
   const preview = p.preview || (isHome ? t("General conversations") : shortPath(p.path, home));
   return (
     <>
-      <div className={"proj" + (on ? " on" : "")}>
+      <div className={"proj" + (on ? " on" : "") + (!isHome ? " removable" : "")}>
         <button type="button" className="proj-hit" title={p.path} onClick={() => openProject(p.id)}>
-          <span className="pn">{isHome ? t("Home") : p.name}</span>
-          {p.asking ? (
-            <span className="badge ask" title="Waiting for your approval" />
-          ) : p.running ? (
-            <span className="badge run" title={t("Working")} />
-          ) : (
-            <span className="ago">{ago(p.updated)}</span>
-          )}
+          <span className="pn-wrap">
+            {p.asking ? (
+              <span className="badge ask" title="Waiting for your approval" />
+            ) : p.running ? (
+              <span className="badge run" title={t("Working")} />
+            ) : on ? (
+              <span className="badge active" aria-hidden="true" />
+            ) : null}
+            <span className="pn">{isHome ? t("Home") : p.name}</span>
+          </span>
+          <span className="ago">{ago(p.updated)}</span>
           <span className="pv" dir="auto">
             {preview}
           </span>
         </button>
         {!isHome && (
-          <button type="button" className="x" title="Remove from the list (the folder stays)" onClick={() => removeProject(p.id)}>
-            <Icon name="x" size={14} />
+          <button
+            type="button"
+            className="x"
+            title={t("Remove from list (folder stays)")}
+            aria-label={t("Remove")}
+            onClick={(e) => {
+              e.stopPropagation();
+              removeProject(p.id);
+            }}
+          >
+            <Icon name="x" size={13} />
           </button>
         )}
       </div>
@@ -197,6 +213,11 @@ export function Sidebar() {
         <Icon name="plus" />
         <span>{t("Open folder")}</span>
         <kbd>{mod} O</kbd>
+      </button>
+      <button type="button" className="nav" onClick={() => openDialog({ kind: "search" })}>
+        <Icon name="search" size={15} />
+        <span>{t("Search chats")}</span>
+        <kbd>{mod} ⇧ F</kbd>
       </button>
       <div className="side-label">{t("Workspaces")}</div>
       <nav className="projects">

@@ -7,6 +7,14 @@ export function tokens(n: number | undefined): string {
   return String(n);
 }
 
+export function formatCost(usd: number | undefined): string {
+  if (!usd || usd <= 0) return "$0.00";
+  if (usd < 0.0001) return "<$0.0001";
+  if (usd < 0.01) return "$" + usd.toFixed(4);
+  if (usd < 1) return "$" + usd.toFixed(3);
+  return "$" + usd.toFixed(2);
+}
+
 export function bytes(n: number): string {
   if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1).replace(/\.0$/, "") + " GB";
   if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1).replace(/\.0$/, "") + " MB";

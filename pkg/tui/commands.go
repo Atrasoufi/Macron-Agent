@@ -24,6 +24,9 @@ var commands = []command{
 	{"/clear", "", "clear the screen and start a new conversation"},
 	{"/compact", "", "summarize the conversation to free context"},
 	{"/provider", "[api|vision|stream|failover|test]", "switch or customize the active provider"},
+	{"/routing", "[on|off|strong <name>|sensitivity <cheap|balanced|quality>]", "smart light/strong model routing"},
+	{"/moa", "[<prompt>|on <preset>|off|status]", "multi-model voting (Mixture of Agents)"},
+	{"/search", "<query>", "search past conversations across sessions"},
 	{"/model", "[name]", "show or switch the model"},
 	{"/effort", "[auto|low|medium|high|ultracode]", "how hard the model thinks before answering"},
 	{"/context", "[auto|128k|1m]", "the model's context window"},
@@ -193,6 +196,49 @@ func (m model) command(text string) (tea.Model, tea.Cmd) {
 		})
 	case "/provider":
 		return m.providerCommand(arg)
+	case "/routing":
+		if rc, ok := m.e.(interface {
+			RoutingCommand(context.Context, string) (string, error)
+		}); ok {
+			out, err := rc.RoutingCommand(context.Background(), arg)
+			if err != nil {
+				m.print(stFail.Render(bullet) + " " + errText(err))
+			} else {
+				m.print(stOK.Render(bullet) + " " + out)
+			}
+			return m, nil
+		}
+		return m, m.say("Smart routing is not supported in this engine")
+	case "/moa":
+		if strings.TrimSpace(arg) != "" && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(arg)), "on ") &&
+			!strings.EqualFold(strings.TrimSpace(arg), "off") && !strings.EqualFold(strings.TrimSpace(arg), "status") {
+			return m, m.startTurn("/moa " + strings.TrimSpace(arg))
+		}
+		if mc, ok := m.e.(interface {
+			MoaCommand(context.Context, string) (string, error)
+		}); ok {
+			out, err := mc.MoaCommand(context.Background(), arg)
+			if err != nil {
+				m.print(stFail.Render(bullet) + " " + errText(err))
+			} else {
+				m.print(stOK.Render(bullet) + " " + out)
+			}
+			return m, nil
+		}
+		return m, m.say("MoA is not supported in this engine")
+	case "/search":
+		if sc, ok := m.e.(interface {
+			SearchHistory(context.Context, string) (string, error)
+		}); ok {
+			out, err := sc.SearchHistory(context.Background(), arg)
+			if err != nil {
+				m.print(stFail.Render(bullet) + " " + errText(err))
+			} else {
+				m.print(out)
+			}
+			return m, nil
+		}
+		return m, m.say("Session search is not supported in this engine")
 	case "/model":
 		if arg != "" {
 			return work("Switching", func() tea.Msg {

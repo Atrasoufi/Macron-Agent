@@ -58,6 +58,8 @@ export interface Ask {
 export interface Usage {
   in: number;
   out: number;
+  cost?: number;
+  costKnown?: boolean;
 }
 
 export interface LiveDraft {
@@ -107,6 +109,8 @@ export interface Info {
   sandboxed?: boolean;
   yolo: boolean;
   failover?: boolean;
+  routingActive?: boolean;
+  moaActive?: string;
   contextWindow: number;
   connections: number;
   services: number;
@@ -331,4 +335,72 @@ export interface ServerEvent {
   project?: string;
   seq?: number;
   [key: string]: unknown;
+}
+
+export interface RoutingConfig {
+  enabled: boolean;
+  active: boolean;
+  lightProviderId: number;
+  lightProviderName: string;
+  strongProviderId: number;
+  strongProviderName: string;
+  sensitivity: string;
+  escalate: boolean;
+  kinds: string[];
+  allKinds: string[];
+}
+
+export interface RoutingUpdate {
+  enabled?: boolean;
+  strongProviderId?: number;
+  sensitivity?: string;
+  escalate?: boolean;
+  kinds?: string[];
+  kindsSet?: boolean;
+}
+
+export interface RoutingTestResult {
+  strong: boolean;
+  kind: string;
+  hard: boolean;
+  targetProvider: string;
+  signals: string[];
+}
+
+export interface MoaSlotView {
+  provider: string;
+  effort?: string;
+}
+
+export interface MoaPresetView {
+  name: string;
+  aggregator: MoaSlotView;
+  references: MoaSlotView[];
+  fanout: string;
+  privacyFilter: string;
+  enabled: boolean;
+  problems?: string[];
+}
+
+export interface MoaState {
+  presets: MoaPresetView[];
+  active: string;
+  defaultPreset: string;
+  privacyFilter: string;
+}
+
+export interface MoaConfigUpdate {
+  active?: string;
+  defaultPreset?: string;
+  privacyFilter?: string;
+}
+
+export interface SearchHit {
+  projectId: string;
+  projectName: string;
+  threadId: string;
+  threadTitle: string;
+  role: string;
+  snippet: string;
+  at: number;
 }

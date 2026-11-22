@@ -22,6 +22,8 @@ type Info struct {
 	Sandboxed     bool   `json:"sandboxed"`
 	Yolo          bool   `json:"yolo"`
 	Failover      bool   `json:"failover"`
+	RoutingActive bool   `json:"routingActive,omitempty"`
+	MoaActive     string `json:"moaActive,omitempty"`
 	ContextWindow int    `json:"contextWindow"`
 	Connections   int    `json:"connections"`
 	Services      int    `json:"services"`

@@ -685,12 +685,18 @@ Macron can hand you a file of any kind in the desktop app and the terminal works
 - **Quiet UI notifications**: removed the white bottom toast bar on routine actions; errors appear in a subtle dismissible inline alert above the composer.
 - **Fail-closed execution mode**: opt-in `sandbox` / `best-effort` / `local` isolation across CLI, TUI (`/execution`), Telegram (`/execution`), and Desktop Settings, persisted across restarts with `CLI flag > MACRON_EXECUTION_MODE > SQLite > best-effort` precedence.
 
-### 1.17.0: 3-surface parity (Desktop, TUI, Telegram), Per-Model Custom Provider Studio & SpectorDev identity
+### 1.17.0: 3-surface parity (Desktop, TUI, Telegram), Per-Model Studio, Smart Routing, MoA Voting, Cost Estimator, Session Search & SpectorDev identity
 
 - **Custom Providers & Per-Model Studio in Desktop**: add unlimited named custom providers, edit any saved provider's Name, Base URL, API Key (with masked display & clear option), Model ID (with `/models` fetch), API format (`Auto` / `OpenAI Chat` / `OpenAI Responses` / `Anthropic Messages`), Effort, custom numeric Context Window (`8k`–`10M`), custom numeric Temperature, Vision toggle, Streaming (SSE) toggle, Priority, Enabled state, live Connection Test with latency, Delete, and global Auto-Failover toggle (`GET/POST /api/providers`, `PUT/DELETE /api/providers/{id}`, `POST /api/providers/{id}/test`, `GET /api/providers/{id}/models`, `POST /api/failover`).
-- **Desktop / TUI / Telegram parity**:
-  - Desktop adds inline `!shell` command execution (`POST /api/projects/{id}/shell`), `/status` system & session inspector (`GET /api/projects/{id}/status`), `/export` Markdown transcript download, `/init` (`MACRON.md` generator), `SOUL.md` editor & reset in Settings (`GET/POST /api/soul`), Composer prompt history (`↑`/`↓`), and persistent Context % + `↑in ↓out` token usage meter after turns complete.
-  - TUI adds `/provider api|vision|stream|failover|test` customization subcommands and `/about`.
+- **Smart Model Routing & Multi-Model Voting (MoA) across Desktop, TUI & Telegram**:
+  - Shared SQLite configuration across all three surfaces: configure automatic light/strong routing (strong model selector, Cheap/Balanced/Quality sensitivity, clickable task kind chips, live sample prompt tester) and MoA multi-model voting presets (aggregator, reference advisors, fanout mode, privacy filter, Always-On / Default) in Desktop Settings (`GET/POST /api/routing`, `POST /api/routing/test`, `GET /api/moa`, `POST/DELETE /api/moa/presets`, `POST /api/moa/config`) or TUI (`/routing`, `/moa`), with live Composer `Auto-Route` / `MoA` pills.
+- **Live USD Cost Estimator & Global Session Search**:
+  - Built-in per-model USD pricing estimator (`pkg/llm/pricing.go`) shows live approximate turn cost (`~$0.014`) right beside `↑in ↓out` token counters in both Desktop Composer and TUI status bar.
+  - Fast Global Session Search across every workspace and conversation thread in Desktop (`Ctrl+Shift+F`, Sidebar **Search chats**, `/search`, `GET /api/search?q=...`) with highlighted snippets and 1-click jump, plus `/search <query>` in TUI.
+- **Desktop / TUI / Telegram parity & UI polish**:
+  - Desktop adds inline `!shell` command execution (`POST /api/projects/{id}/shell`), `/status` system & session inspector (`GET /api/projects/{id}/status`), `/export` Markdown transcript download, `/init` (`MACRON.md` generator), `SOUL.md` editor & reset in Settings (`GET/POST /api/soul`), Composer prompt history (`↑`/`↓`), and fixes the sidebar workspace/thread delete button (`×`) overlap with the active status indicator in both LTR and Persian RTL modes.
+  - TUI adds `/provider api|vision|stream|failover|test`, `/routing`, `/moa`, `/search`, and `/about`.
   - Telegram Bot adds `/status`, `/compact`, and `/about`, syncs every handled command (`/status`, `/execution`, `/sandbox`, `/compact`, `/about`, etc.) into Telegram's `SetMyCommands` menu and `/help`, backed by regression tests.
 - **SpectorDev Team identity & MIT License**: unified SpectorDev Team (`https://t.me/SpectorDev`) creator identity and MIT License attribution across `LICENSE`, `pkg/app`, `SOUL.md` / `DefaultPersona`, CLI (`macron about`), TUI, Telegram Bot, Desktop UI, and Windows installer metadata.
+
 

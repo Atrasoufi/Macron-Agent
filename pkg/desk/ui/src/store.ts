@@ -12,6 +12,7 @@ export type Dialog =
   | { kind: "folder" }
   | { kind: "settings" }
   | { kind: "status" }
+  | { kind: "search" }
   | { kind: "server-add" }
   | { kind: "model-connect" }
   | { kind: "provider-edit"; provider?: ProviderDetail }

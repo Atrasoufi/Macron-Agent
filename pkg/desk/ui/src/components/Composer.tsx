@@ -22,7 +22,7 @@ import {
   toggleChanges,
 } from "../actions";
 import { fileURL, server } from "../api";
-import { bytes, tokens, took } from "../format";
+import { bytes, formatCost, tokens, took } from "../format";
 import { useT } from "../i18n";
 import { Icon } from "../icons";
 import { useStore } from "../store";
@@ -32,12 +32,15 @@ type Command = { name: string; hint: string; run: () => void };
 
 const COMMANDS: Command[] = [
   { name: "/new", hint: "Start a new conversation", run: () => newChat() },
+  { name: "/search", hint: "Search all conversations across workspaces", run: () => openDialog({ kind: "search" }) },
   { name: "/compact", hint: "Summarise the conversation to free room", run: () => compact() },
   { name: "/status", hint: "Show model, sandbox, context and SpectorDev info", run: () => openDialog({ kind: "status" }) },
   { name: "/export", hint: "Download this conversation as Markdown", run: () => exportConversation() },
   { name: "/init", hint: "Write or update MACRON.md for this project", run: () => void initProject() },
   { name: "/model", hint: "Pick the model", run: () => openDialog({ kind: "palette", mode: "models" }) },
   { name: "/provider", hint: "Add or customize models & providers", run: () => openDialog({ kind: "provider-edit" }) },
+  { name: "/routing", hint: "Configure smart light/strong model routing", run: () => openDialog({ kind: "settings" }) },
+  { name: "/moa", hint: "Configure multi-model voting (or type /moa <prompt>)", run: () => openDialog({ kind: "settings" }) },
   { name: "/plan", hint: "Plan first and change nothing", run: () => setMode("plan") },
   { name: "/build", hint: "Let Macron make changes", run: () => setMode("build") },
   { name: "/changes", hint: "View git changes and diff", run: () => toggleChanges(true) },
@@ -74,27 +77,47 @@ function Meter() {
   const ctx = useStore((s) => s.live.context);
   const usage = useStore((s) => s.live.usage);
   const last = useStore((s) => s.lastTook);
+  const routingActive = useStore((s) => s.info.routingActive);
+  const moaActive = useStore((s) => s.info.moaActive);
   const hasCtx = Boolean(ctx && ctx.window);
   const hasUsage = Boolean(usage && (usage.in || usage.out));
-  if (!hasCtx && !hasUsage) return null;
+  if (!hasCtx && !hasUsage && !routingActive && !moaActive) return null;
   const pct = hasCtx && ctx ? Math.min(1, ctx.used / ctx.window) : 0;
   const parts: string[] = [];
   if (hasCtx && ctx) parts.push(`Context used: ${Math.round(pct * 100)}% of ${tokens(ctx.window)} tokens`);
-  if (hasUsage && usage) parts.push(`${tokens(usage.in)} in, ${tokens(usage.out)} out`);
+  if (hasUsage && usage) {
+    parts.push(`${tokens(usage.in)} in, ${tokens(usage.out)} out`);
+    if (usage.costKnown && typeof usage.cost === "number") parts.push(`Est. cost: ~${formatCost(usage.cost)}`);
+  }
   if (last) parts.push(`last reply took ${took(last)}`);
   return (
-    <span className={"meter" + (pct > 0.8 ? " high" : "")} dir="ltr" title={parts.join(" · ")}>
-      {hasCtx && (
-        <>
-          <span className="meter-bar">
-            <span style={{ width: `${Math.round(pct * 100)}%` }} />
-          </span>
-          <span>{Math.round(pct * 100)}%</span>
-        </>
+    <span className="meter-group" dir="ltr">
+      {moaActive && (
+        <button type="button" className="ai-badge moa" title={`MoA active: ${moaActive}`} onClick={() => openDialog({ kind: "settings" })}>
+          MoA · {moaActive}
+        </button>
       )}
-      {hasUsage && usage && (
-        <span className="meter-tok">
-          ↑{tokens(usage.in)} ↓{tokens(usage.out)}
+      {!moaActive && routingActive && (
+        <button type="button" className="ai-badge route" title="Smart light/strong model routing active" onClick={() => openDialog({ kind: "settings" })}>
+          Auto-Route
+        </button>
+      )}
+      {(hasCtx || hasUsage) && (
+        <span className={"meter" + (pct > 0.8 ? " high" : "")} title={parts.join(" · ")}>
+          {hasCtx && (
+            <>
+              <span className="meter-bar">
+                <span style={{ width: `${Math.round(pct * 100)}%` }} />
+              </span>
+              <span>{Math.round(pct * 100)}%</span>
+            </>
+          )}
+          {hasUsage && usage && (
+            <span className="meter-tok">
+              ↑{tokens(usage.in)} ↓{tokens(usage.out)}
+              {usage.costKnown && typeof usage.cost === "number" && <span className="meter-cost">~{formatCost(usage.cost)}</span>}
+            </span>
+          )}
         </span>
       )}
     </span>

@@ -44,6 +44,8 @@ import { getState, setState, useStore } from "../store";
 import type { Theme } from "../store";
 import type { Ask, Listing, Plugin } from "../types";
 import { ProviderEditor, ProvidersSection } from "./ProviderManager";
+import { RoutingMoaSection } from "./RoutingMoaSection";
+import { SessionSearch } from "./SessionSearch";
 import { AboutCard, ConnectionsSection, MemorySection, SkillsSection, SoulSection, StatusDialog, UpdatesSection } from "./SettingsExtras";
 
 function Modal({ kind, dismiss, children }: { kind: string; dismiss: boolean; children: ReactNode }) {
@@ -75,6 +77,12 @@ export function Dialogs() {
       return (
         <Modal kind="palette" dismiss>
           <Palette key={d.mode} mode={d.mode} />
+        </Modal>
+      );
+    case "search":
+      return (
+        <Modal kind="palette" dismiss>
+          <SessionSearch />
         </Modal>
       );
     case "folder":
@@ -735,6 +743,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
     ];
     const list: Entry[] = [
       { id: "new", group: "Actions", label: "New conversation", icon: "edit", keys: [mod, "N"], run: () => newChat() },
+      { id: "search", group: "Actions", label: "Search conversations…", hint: "Across all workspaces & threads", icon: "search", keys: [mod, "Shift", "F"], run: () => openDialog({ kind: "search" }) },
       appMode === "plan"
         ? { id: "mode", group: "Actions", label: "Switch to Build mode", hint: "Let Macron make changes", icon: "code", keys: [mod, "Shift", "P"], run: () => toggleMode() }
         : { id: "mode", group: "Actions", label: "Switch to Plan mode", hint: "Plan first, change nothing", icon: "map", keys: [mod, "Shift", "P"], run: () => toggleMode() },
@@ -783,7 +792,7 @@ function Palette({ mode }: { mode: "root" | "models" }) {
   const { sel, setSel, listRef, move } = useList(shown.length);
 
   const pick = (e: Entry) => {
-    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect" || e.id === "mcp" || e.id === "status";
+    const opensDialog = e.id === "model" || e.id === "folder" || e.id === "settings" || e.id === "connect" || e.id === "mcp" || e.id === "status" || e.id === "search";
     if (!opensDialog) closeDialog();
     e.run();
   };
@@ -1192,6 +1201,7 @@ function Settings() {
           </button>
         </Section>
         <ProvidersSection />
+        <RoutingMoaSection />
         {tuning && tuning.model && (
           <>
             <Section title={t("Effort")} help={effortNote(tuning)}>
@@ -1311,6 +1321,7 @@ function Settings() {
               [t("New line"), ["Shift", "Enter"]],
               [t("Stop"), ["Esc"]],
               [t("Command palette"), [mod, "K"]],
+              [t("Search chats"), [mod, "Shift", "F"]],
               [t("New conversation"), [mod, "N"]],
               [t("Plan mode"), [mod, "Shift", "P"]],
               [t("Open folder"), [mod, "O"]],

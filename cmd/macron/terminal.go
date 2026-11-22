@@ -27,8 +27,10 @@ import (
 	"github.com/Metixpro/macron-agent/pkg/llm"
 	"github.com/Metixpro/macron-agent/pkg/machine"
 	"github.com/Metixpro/macron-agent/pkg/memory"
+	"github.com/Metixpro/macron-agent/pkg/moa"
 	"github.com/Metixpro/macron-agent/pkg/plugins"
 	"github.com/Metixpro/macron-agent/pkg/providers"
+	"github.com/Metixpro/macron-agent/pkg/router"
 	"github.com/Metixpro/macron-agent/pkg/store"
 	"github.com/Metixpro/macron-agent/pkg/textutil"
 	"github.com/Metixpro/macron-agent/pkg/tools"
@@ -391,12 +393,89 @@ func (t *terminal) Turn(ctx context.Context, text string, l *agent.EventListener
 		filter = planToolAllowed
 		about += "\nPlan mode: inspect with read-only tools and explain the plan. Do not execute shell commands, change files, configure services, or send messages."
 	}
-	res, err := t.app.Agent.Do(ctx, agent.Request{
+
+	runCtx := ctx
+	turnText := text
+	forceMoa := false
+	if strings.HasPrefix(strings.TrimSpace(turnText), "/moa ") {
+		turnText = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(turnText), "/moa "))
+		forceMoa = true
+	}
+
+	// Smart Model Routing (shared with Telegram Bot settings)
+	if !forceMoa && t.bot != nil {
+		if rt := t.bot.chooseModel(uid, tierOwner, router.Input{Text: turnText}, false, nil); rt != nil {
+			runCtx = rt.prefer(runCtx)
+			window = rt.window(t.bot, t.bot.tier(tierOwner), window)
+			if rt.strong && l != nil && l.OnThought != nil {
+				l.OnThought(fmt.Sprintf("Smart Routing → strong model (%s)", rt.verdict.Kind))
+			}
+		}
+	}
+
+	// Multi-Model Voting (MoA): one-shot /moa or always-on preset
+	if t.bot != nil {
+		var preset *moa.Preset
+		if forceMoa {
+			defName, _ := t.st.Setting(settingMoaDefault)
+			if p, ok := moa.Find(t.bot.moaPresets(), defName); ok && len(t.bot.moaProblems(p)) == 0 {
+				if p.PrivacyFilter == "" {
+					p.PrivacyFilter, _ = t.st.Setting(settingMoaPrivacy)
+				}
+				preset = &p
+			}
+		} else if actName, _ := t.st.Setting(settingMoaActive); actName != "" {
+			if p, ok := moa.Find(t.bot.moaPresets(), actName); ok && len(t.bot.moaProblems(p)) == 0 {
+				if p.PrivacyFilter == "" {
+					p.PrivacyFilter, _ = t.st.Setting(settingMoaPrivacy)
+				}
+				preset = &p
+			}
+		}
+		if preset != nil {
+			mcClient := &moa.Client{
+				Preset: *preset,
+				Strict: t.bot.moaStrict(uid),
+				OnAdvice: func(advice []moa.Advice) {
+					if l == nil || l.OnThought == nil {
+						return
+					}
+					var names []string
+					for _, a := range advice {
+						if a.Err == nil {
+							names = append(names, a.Slot.Provider)
+						}
+					}
+					l.OnThought(fmt.Sprintf("MoA (%s): gathered advice from %s → aggregating with %s", preset.Name, strings.Join(names, ", "), preset.Aggregator.Provider))
+				},
+				Dest: func(s moa.Slot) string {
+					if pr, ok := t.bot.moaProvider(s.Provider); ok {
+						return pr.BaseURL + "|" + pr.Model
+					}
+					return s.Provider
+				},
+				Call: func(cctx context.Context, s moa.Slot, req llm.Request) (*llm.Response, error) {
+					pr, ok := t.bot.moaProvider(s.Provider)
+					if !ok {
+						return nil, fmt.Errorf("no provider %q", s.Provider)
+					}
+					cctx = providers.Only(cctx, pr.ID)
+					if s.Effort != "" {
+						cctx = llm.WithEffort(cctx, s.Effort)
+					}
+					return t.prov.Complete(cctx, req)
+				},
+			}
+			runCtx = agent.WithClient(runCtx, mcClient)
+		}
+	}
+
+	res, err := t.app.Agent.Do(runCtx, agent.Request{
 		SessionID:        t.session,
-		Input:            llm.Message{Role: "user", Content: text},
+		Input:            llm.Message{Role: "user", Content: turnText},
 		History:          mc.History,
 		Memory:           mc.Summary,
-		Chat:             agent.IsSmallTalk(text),
+		Chat:             agent.IsSmallTalk(turnText),
 		HistoryTokens:    historyBudget(t.st, window),
 		ContextWindow:    window,
 		ContextCarry:     carry,

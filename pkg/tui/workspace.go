@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Metixpro/macron-agent/pkg/agent"
+	"github.com/Metixpro/macron-agent/pkg/llm"
 )
 
 type commandMsg struct{ text string }
@@ -321,7 +322,11 @@ func (m model) statusBar(w int) string {
 		right = append(right, fmt.Sprintf("context %s/%s", short(m.ctxUsed), short(m.ctxWindow)))
 	}
 	if m.tokIn+m.tokOut > 0 {
-		right = append(right, fmt.Sprintf("↑%s ↓%s", short(m.tokIn), short(m.tokOut)))
+		tokStr := fmt.Sprintf("↑%s ↓%s", short(m.tokIn), short(m.tokOut))
+		if usd, ok := llm.EstimateCost(m.info.Model, llm.Usage{PromptTokens: m.tokIn, CompletionTokens: m.tokOut}); ok {
+			tokStr += " ~" + llm.FormatCost(usd)
+		}
+		right = append(right, tokStr)
 	}
 	if m.toolCount > 0 && w >= 80 {
 		right = append(right, plural(m.toolCount, "tool call"))

@@ -241,6 +241,16 @@ const FA: Record<string, string> = {
   "Download this conversation as Markdown": "دانلود این گفتگو با فرمت Markdown",
   "Write or update MACRON.md for this project": "ساخت یا به‌روزرسانی MACRON.md پروژه",
   "Add or customize models & providers": "افزودن یا شخصی‌سازی مدل‌ها و پروایدرها",
+  "Updating": "در حال آپدیت به",
+  "Checking release": "بررسی نسخه جدید",
+  "Downloading update": "در حال دانلود بسته آپدیت",
+  "Verifying SHA-256": "تأیید اصالت SHA-256",
+  "Extracting package": "استخراج بسته",
+  "Verifying new binary": "تست سلامت نسخه جدید",
+  "Installing desktop app": "نصب اپلیکیشن دسکتاپ",
+  "Updating desktop app": "به‌روزرسانی اپلیکیشن دسکتاپ",
+  "Ready to restart": "آماده برای راه‌اندازی مجدد",
+  "Retry": "تلاش مجدد",
 };
 
 export function tr(lang: Lang, key: string): string {

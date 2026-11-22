@@ -46,10 +46,13 @@ func Open(dir, defaultSoul string) (*Brain, error) {
 		Hint: "One fact per line, starting with “- ”. Edit freely: the agent reads this file before it answers."}
 	b.Memory = &Notes{Path: filepath.Join(dir, MemoryFile), Title: "MEMORY.md — what the agent learned about its work and machine",
 		Hint: "One note per line, starting with “- ”: projects, paths, servers, habits, things that worked. Edit freely."}
-	if _, err := os.Stat(b.soulPath()); errors.Is(err, os.ErrNotExist) {
+	if raw, err := os.ReadFile(b.soulPath()); errors.Is(err, os.ErrNotExist) {
 		if err := writeFile(b.soulPath(), []byte(strings.TrimSpace(defaultSoul)+"\n")); err != nil {
 			return nil, err
 		}
+	} else if err == nil && isLegacyDefaultSoul(string(raw)) && strings.Contains(defaultSoul, "SpectorDev") {
+		_ = writeFile(b.soulPath()+".pre-spectordev.bak", raw)
+		_ = writeFile(b.soulPath(), []byte(strings.TrimSpace(defaultSoul)+"\n"))
 	}
 	for _, n := range []*Notes{b.User, b.Memory} {
 		if err := n.init(); err != nil {
@@ -132,3 +135,11 @@ func writeFile(path string, data []byte) error {
 	}
 	return os.Rename(name, path)
 }
+
+func isLegacyDefaultSoul(raw string) bool {
+	if strings.Contains(raw, "SpectorDev") {
+		return false
+	}
+	return strings.Contains(raw, "@Cianyd") || strings.Contains(raw, "حاج متی")
+}
+

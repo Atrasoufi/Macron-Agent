@@ -94,11 +94,13 @@ function Meter() {
     <span className="meter-group" dir="ltr">
       {moaActive && (
         <button type="button" className="ai-badge moa" title={`MoA active: ${moaActive}`} onClick={() => openDialog({ kind: "settings" })}>
+          <span className="ai-dot" aria-hidden="true" />
           MoA · {moaActive}
         </button>
       )}
       {!moaActive && routingActive && (
         <button type="button" className="ai-badge route" title="Smart light/strong model routing active" onClick={() => openDialog({ kind: "settings" })}>
+          <span className="ai-dot" aria-hidden="true" />
           Auto-Route
         </button>
       )}

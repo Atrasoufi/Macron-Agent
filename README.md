@@ -65,7 +65,7 @@ A personal AI agent built in Go for Windows, Linux, and macOS — across Desktop
 | ویژگی | توضیح |
 |---|---|
 | **سه محیط یکپارچه** | اپلیکیشن دسکتاپ بومی، محیط ترمینال تعاملی (TUI) و ربات تلگرام — همگی روی یک موتور واحد |
-| **اپ دسکتاپ پیشرفته (`v1.17.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با RTL هوشمند، استودیو شخصی‌سازی کامل **پروایدرها و مدل‌ها**، **مسیریابی هوشمند مدل سبک/قوی (Smart Routing)**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، پنل تغییرات Git و Diff رنگی، منشن `@file`، پیوست فایل و عکس، اجرای `!shell` و آپدیت خودکار از GitHub Releases |
+| **اپ دسکتاپ پیشرفته (`v1.18.0`)** | رابط کاربری دوزبانه **فارسی / انگلیسی** با طراحی **شیشه‌ای (Frosted Glass) و کروم دست‌ساز**، استودیو شخصی‌سازی کامل **پروایدرها و مدل‌ها**، **مسیریابی هوشمند مدل سبک/قوی**، **رأی‌گیری چندمدلی (MoA)**، **تخمین هزینه دلاری توکن‌ها**، **جستجوی سراسری مکالمات (`Ctrl+Shift+F`)**، پنل تغییرات Git و Diff رنگی، اجرای `!shell` و **آپدیتر خودکار با نوار پیشرفت زنده و سرعت دانلود** |
 | **امنیت و کنترل واقعی** | حالت‌های **Build** و **Plan** (فقط‌خواندنی)، تأیید دستورات پرخطر (Smart / Always ask / Never ask)، کنترل حالت اجرا (**Sandbox / Best-effort / Local** با پشتیبانی bubblewrap، Landlock و Seatbelt) و حالت موقت YOLO |
 | **کار روی سرور بدون باز کردن پورت** | اتصال مستقیم دسکتاپ به سرورهای Linux/SSH و WSL روی تونل رمزشده SSH با تأیید اثر انگشت (`~/.ssh/known_hosts`) |
 | **حافظه و مهارت‌های دست خودت** | تمام داده‌ها به صورت فایل‌های شفاف و قابل ویرایش (`SOUL.md`، `USER.md`، `MEMORY.md`، `skills/` و SQLite) داخل پروفایل خودت ذخیره می‌شوند |
@@ -244,7 +244,7 @@ make test-race    # تست‌های رگرسیون همراه با race detector
 | Area | What you get |
 |---|---|
 | **Three unified interfaces** | Native Desktop app, interactive Terminal (TUI), and Telegram bot — all powered by the same core engine |
-| **Desktop App (`v1.17.0`)** | Full **English & Persian (`فارسی`)** UI with smart RTL, **Per-Model Custom Provider Studio**, **Smart Light/Strong Model Routing**, **Multi-Model Voting (MoA)**, live **USD Cost Estimator**, **Global Session Search (`Ctrl+Shift+F`)**, Git Changes & colored Unified Diff panel, `@file` mentions, attachments, `!shell`, and SHA-256 verified **GitHub Releases auto-updates** |
+| **Desktop App (`v1.18.0`)** | Full **English & Persian (`فارسی`)** UI with **frosted-glass & machined-chrome craft**, **Per-Model Custom Provider Studio**, **Smart Light/Strong Model Routing**, **Multi-Model Voting (MoA)**, live **USD Cost Estimator**, **Global Session Search (`Ctrl+Shift+F`)**, Git Changes & Unified Diff, `!shell`, and **SHA-256 GitHub Auto-Updater with live download progress bar** |
 | **Safety & execution control** | **Build** vs read-only **Plan** modes, granular command approvals (`Smart` / `Always ask` / `Never ask`), execution mode isolation (**Sandbox / Best-effort / Local** via bubblewrap, Landlock, or Seatbelt), and timed 30-minute YOLO toggle |
 | **Zero-port remote servers** | Launch and control Macron on remote Linux servers or WSL directly from Desktop over encrypted SSH with host-key verification (`~/.ssh/known_hosts`) |
 | **Transparent local memory** | Conversations, personality, notes, and skills stay in plain editable files (`SOUL.md`, `USER.md`, `MEMORY.md`, `skills/`) and local SQLite under your profile |

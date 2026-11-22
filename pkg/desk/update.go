@@ -21,6 +21,12 @@ type UpdateStatus struct {
 	Installing bool   `json:"installing,omitempty"`
 	Installed  bool   `json:"installed,omitempty"`
 	Step       string `json:"step,omitempty"`
+	Phase      string `json:"phase,omitempty"`
+	Downloaded int64  `json:"downloaded,omitempty"`
+	Total      int64  `json:"total,omitempty"`
+	Percent    int    `json:"percent,omitempty"`
+	SpeedBps   int64  `json:"speedBps,omitempty"`
+	AssetSize  int64  `json:"assetSize,omitempty"`
 	Error      string `json:"error,omitempty"`
 	CheckedAt  int64  `json:"checkedAt,omitempty"`
 }
@@ -34,6 +40,19 @@ type updateState struct {
 }
 
 const updateCacheTTL = 30 * time.Minute
+
+func releaseAssetSize(rel *updater.Release) int64 {
+	if rel == nil {
+		return 0
+	}
+	want := updater.AssetName(rel.Version())
+	for _, a := range rel.Assets {
+		if a.Name == want {
+			return a.Size
+		}
+	}
+	return 0
+}
 
 func (s *Server) checkUpdate(ctx context.Context, force bool) UpdateStatus {
 	s.upd.mu.Lock()
@@ -70,6 +89,7 @@ func (s *Server) checkUpdate(ctx context.Context, force bool) UpdateStatus {
 	st.Tag = rel.TagName
 	st.URL = rel.HTMLURL
 	st.Notes = clipRunes(strings.TrimSpace(rel.Body), 2000)
+	st.AssetSize = releaseAssetSize(rel)
 	st.Available = updater.Newer(latest, app.Version)
 	s.upd.rel = rel
 	s.upd.status = st
@@ -95,7 +115,13 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 	s.upd.installing = true
 	s.upd.status.Installing = true
 	s.upd.status.Error = ""
-	s.upd.status.Step = "checking release"
+	s.upd.status.Phase = "checking"
+	s.upd.status.Step = "Checking release"
+	s.upd.status.Percent = 1
+	s.upd.status.Downloaded = 0
+	s.upd.status.Total = releaseAssetSize(rel)
+	s.upd.status.SpeedBps = 0
+	initSt := s.upd.status
 	s.upd.mu.Unlock()
 
 	publish := func(st UpdateStatus) {
@@ -103,6 +129,7 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 			s.hub.publish(map[string]any{"type": "update", "update": st})
 		}
 	}
+	publish(initSt)
 
 	if rel == nil {
 		cctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
@@ -113,6 +140,9 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 			s.upd.mu.Lock()
 			s.upd.installing = false
 			s.upd.status.Installing = false
+			s.upd.status.Phase = ""
+			s.upd.status.Step = ""
+			s.upd.status.Percent = 0
 			s.upd.status.Error = err.Error()
 			st := s.upd.status
 			s.upd.mu.Unlock()
@@ -143,9 +173,14 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 	uctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	err := updater.Install(uctx, rel, func(step string) {
+	err := updater.InstallWithProgress(uctx, rel, func(p updater.Progress) {
 		s.upd.mu.Lock()
-		s.upd.status.Step = step
+		s.upd.status.Phase = p.Phase
+		s.upd.status.Step = p.Label
+		s.upd.status.Downloaded = p.Downloaded
+		s.upd.status.Total = p.Total
+		s.upd.status.Percent = p.Percent
+		s.upd.status.SpeedBps = p.SpeedBps
 		st := s.upd.status
 		s.upd.mu.Unlock()
 		publish(st)
@@ -154,7 +189,10 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 		s.upd.mu.Lock()
 		s.upd.installing = false
 		s.upd.status.Installing = false
+		s.upd.status.Phase = ""
 		s.upd.status.Step = ""
+		s.upd.status.Percent = 0
+		s.upd.status.SpeedBps = 0
 		s.upd.status.Error = err.Error()
 		st := s.upd.status
 		s.upd.mu.Unlock()
@@ -172,7 +210,9 @@ func (s *Server) updateInstallAPI(w http.ResponseWriter, r *http.Request) {
 		URL:       rel.HTMLURL,
 		Available: false,
 		Installed: true,
-		Step:      "installed",
+		Phase:     "done",
+		Step:      "Ready to restart",
+		Percent:   100,
 		CheckedAt: time.Now().UnixMilli(),
 	}
 	st := s.upd.status
